@@ -129,37 +129,63 @@ function formatWeatherMessage(data: any, settlement?: any): string {
 
 // Format marketplace data as Telegram message
 function formatMarketplaceMessage(data: any, settlement?: any): string {
-    let message = "🛍️ **Marketplace Items**\n\n";
-    message += `📊 **Total Items**: ${data.total_items}\n\n`;
+    let message = "🛍️ Marketplace Items\n\n";
     
-    data.items.forEach((item: any, index: number) => {
-        message += `**${index + 1}. ${item.item}**\n`;
-        message += `💰 Price: $${item.price_usd}\n`;
-        message += `🏪 Seller: ${item.seller} (⭐ ${item.trust_score}%)\n`;
-        message += `📍 Location: ${item.location}\n`;
-        message += `📦 Condition: ${item.condition}\n`;
-        message += `🚚 Delivery: ${item.delivery_speed}\n`;
-        message += `🏷️ Tags: ${item.tags.join(", ")}\n\n`;
-    });
+    // Show filters if applied - escape special characters for Telegram
+    if (data.filters_applied && (data.filters_applied.name || data.filters_applied.price || data.filters_applied.location)) {
+        message += "🔍 Filters Applied:\n";
+        if (data.filters_applied.name) message += `  • Name: ${data.filters_applied.name}\n`;
+        if (data.filters_applied.price) message += `  • Price: $${data.filters_applied.price}\n`;
+        if (data.filters_applied.location) message += `  • Location: ${data.filters_applied.location}\n`;
+        message += "\n";
+    }
+    
+    message += `📊 Total Items: ${data.total_items}\n\n`;
+    
+    if (data.total_items === 0) {
+        message += "❌ No items found matching your filters.\n\n";
+        message += "💡 Try different filters or use 'market' to see all items.";
+    } else {
+        data.items.forEach((item: any, index: number) => {
+            message += `${index + 1}. ${item.item}\n`;
+            message += `💰 Price: $${item.price_usd}\n`;
+            message += `🏪 Seller: ${item.seller} (⭐ ${item.trust_score}%)\n`;
+            message += `📍 Location: ${item.location}\n`;
+            message += `📦 Condition: ${item.condition}\n`;
+            message += `🚚 Delivery: ${item.delivery_speed}\n`;
+            message += `🏷️ Tags: ${item.tags.join(", ")}\n\n`;
+        });
+    }
     
     if (settlement?.txHash) {
-        message += `✅ **Payment Confirmed**\n`;
-        message += `🔗 **TX Hash**: \`${settlement.txHash}\`\n`;
-        message += `🌐 **Network**: ${settlement.network}\n`;
+        message += `✅ Payment Confirmed\n`;
+        message += `🔗 TX Hash: ${settlement.txHash}\n`;
+        message += `🌐 Network: ${settlement.network}\n`;
     }
     
     return message;
 }
 
 // Get marketplace data (trigger payment flow)
-async function getMarketplaceData() {
+async function getMarketplaceData(filters?: { name?: string; price?: string; location?: string }) {
     const mnemonic = process.env.WALLET_MNEMONIC;
     if (!mnemonic) {
         throw new Error("❌ Set WALLET_MNEMONIC env var (24-word mnemonic)");
     }
 
     const rpcUrl = process.env.TON_RPC_URL ?? "https://testnet.toncenter.com/api/v2/jsonRPC";
-    const resourceUrl = process.env.RESOURCE_URL ?? "http://localhost:3000/api/market";
+    
+    // Build URL with query parameters
+    let resourceUrl = "http://localhost:3000/api/market";
+    const params = new URLSearchParams();
+    
+    if (filters?.name) params.append('name', filters.name);
+    if (filters?.price) params.append('price', filters.price);
+    if (filters?.location) params.append('location', filters.location);
+    
+    if (params.toString()) {
+        resourceUrl += `?${params.toString()}`;
+    }
 
     const keypair = await mnemonicToPrivateKey(mnemonic.split(" "));
     const wallet = WalletContractV5R1.create({
@@ -179,6 +205,9 @@ async function getMarketplaceData() {
     console.log(`💳 Wallet: ${wallet.address.toString({ bounceable: false })}`);
     console.log(`💰 Balance: ${nanoToTon(balance.toString())} TON`);
     console.log(`🔢 Seqno: ${seqno}`);
+    if (filters && Object.keys(filters).length > 0) {
+        console.log(`🔍 Filters: ${JSON.stringify(filters)}`);
+    }
 
     // Execute x402 payment flow
     const result = await x402Fetch(resourceUrl, {
@@ -263,19 +292,65 @@ async function handleUpdate(update: TelegramUpdate) {
             await sendMessage(chatId, errorMessage);
             console.error("❌ Processing error:", error);
         }
-    } else if (text === "market" || text === "/market") {
+    } else if (text.toLowerCase().startsWith("market")) {
+        // Parse filters from natural language command
+        // Formats: 
+        // - market
+        // - market MacBook
+        // - market price 500-700
+        // - market in Lausanne
+        // - market MacBook price 600-700 in Lausanne
+        const filters: { name?: string; price?: string; location?: string } = {};
+        
+        // Remove "market" prefix and trim
+        const filterText = text.toLowerCase().replace(/^\/market|^market/i, '').trim();
+        
+        if (filterText) {
+            // Extract price filter (price 500-700, $500-$700, 500-700)
+            const priceMatch = filterText.match(/(?:price\s+)?(\$?\d+\s*-\s*\$?\d+)/i);
+            if (priceMatch) {
+                filters.price = priceMatch[1].replace(/\$/g, '').replace(/\s/g, '');
+            }
+            
+            // Extract location filter (in Lausanne, location Zurich, etc.)
+            const locationMatch = filterText.match(/(?:in|location|at)\s+(\w+)/i);
+            if (locationMatch) {
+                filters.location = locationMatch[1];
+            }
+            
+            // Extract name filter (everything else that's not price or location)
+            let nameText = filterText;
+            // Remove price part
+            if (priceMatch) {
+                nameText = nameText.replace(priceMatch[0], '').trim();
+            }
+            // Remove location part
+            if (locationMatch) {
+                nameText = nameText.replace(locationMatch[0], '').trim();
+            }
+            // Remove common filter keywords
+            nameText = nameText.replace(/\b(price|in|location|at)\b/gi, '').trim();
+            
+            if (nameText) {
+                filters.name = nameText;
+            }
+        }
+        
         // Send processing message
-        await sendMessage(chatId, "⏳ Fetching marketplace data and processing payment...\nPlease wait...");
+        const filterDesc = Object.keys(filters).length > 0 
+            ? ` with filters` 
+            : '';
+        await sendMessage(chatId, `⏳ Fetching marketplace data${filterDesc}...\nPlease wait...`);
 
         try {
-            const result = await getMarketplaceData();
+            const result = await getMarketplaceData(Object.keys(filters).length > 0 ? filters : undefined);
 
             if (result.success) {
                 const message = formatMarketplaceMessage(result.data, result.settlement);
                 await sendMessage(chatId, message);
                 console.log("✅ Marketplace data sent successfully");
             } else {
-                let errorMessage = "❌ **Payment Failed**\n\n";
+                let errorMessage = "❌ Payment Failed\n\n";
                 if (result.paid) {
                     errorMessage += "⚠️ Payment broadcasted but settlement failed (transaction may still confirm on-chain)\n\n";
                 }
@@ -284,7 +359,7 @@ async function handleUpdate(update: TelegramUpdate) {
                 console.error("❌ Payment failed:", result.error);
             }
         } catch (error: any) {
-            const errorMessage = `❌ **Error**\n\n${error.message || String(error)}`;
+            const errorMessage = `❌ Error\n\n${error.message || String(error)}`;
             await sendMessage(chatId, errorMessage);
             console.error("❌ Processing error:", error);
         }
@@ -292,23 +367,34 @@ async function handleUpdate(update: TelegramUpdate) {
         const welcomeMessage = 
             `👋 Hello, ${username}!\n\n` +
             `Welcome to the Payment Bot!\n\n` +
-            `📝 **Available Commands**:\n` +
-            `• \`weather\` or \`/weather\` - Get weather data (0.01 BSA USD)\n` +
-            `• \`market\` or \`/market\` - Browse marketplace items (0.01 BSA USD)\n\n` +
-            `💡 Type a command to try it out!`;
+            `📝 Available Commands:\n` +
+            `• weather - Get weather data (0.01 BSA USD)\n` +
+            `• market - Browse all marketplace items (0.01 BSA USD)\n\n` +
+            `🔍 Market Filters (Natural Language):\n` +
+            `• market MacBook\n` +
+            `• market price 500-700\n` +
+            `• market in Lausanne\n` +
+            `• market laptop price 600-800 in Zurich\n\n` +
+            `💡 Just type naturally!`;
         await sendMessage(chatId, welcomeMessage);
     } else if (text === "/help" || text === "help") {
         const helpMessage = 
-            `📖 **Help**\n\n` +
+            `📖 Help\n\n` +
             `This bot uses the x402 protocol on the TON blockchain to fetch paid data.\n\n` +
-            `**Available Commands**:\n` +
-            `• \`weather\` - Weather information\n` +
-            `• \`market\` - Marketplace listings\n\n` +
-            `**How to use**:\n` +
-            `1. Type a command (e.g., \`market\`)\n` +
-            `2. The bot automatically handles payment (0.01 BSA USD)\n` +
-            `3. Receive the requested data\n\n` +
-            `**Required**: Wallet must have sufficient TON balance`;
+            `Available Commands:\n` +
+            `• weather - Weather information\n` +
+            `• market - All marketplace listings\n\n` +
+            `Filter Examples (Natural Language):\n` +
+            `• market MacBook - Find MacBook items\n` +
+            `• market price 500-700 - Price $500-$700\n` +
+            `• market in Lausanne - Items in Lausanne\n` +
+            `• market laptop in Zurich - Laptops in Zurich\n` +
+            `• market Dell price 500-600 - Dell, $500-600\n\n` +
+            `How to use:\n` +
+            `1. Type a command naturally\n` +
+            `2. Bot handles payment (0.01 BSA USD)\n` +
+            `3. Receive filtered data\n\n` +
+            `Required: Wallet must have sufficient TON balance`;
         await sendMessage(chatId, helpMessage);
     }
 }

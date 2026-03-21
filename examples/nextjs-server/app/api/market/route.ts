@@ -1,9 +1,15 @@
 import { paymentGate } from "@ton-x402/middleware";
 import { getPaymentConfig } from "../../../lib/payment-config";
 
-const handler = (_request: Request) => {
+const handler = (request: Request) => {
+    // Parse URL to get query parameters
+    const url = new URL(request.url);
+    const name = url.searchParams.get('name');
+    const price = url.searchParams.get('price');
+    const location = url.searchParams.get('location');
+
     // Marketplace data
-    const marketplaceItems = [
+    const allItems = [
         {
             id: "pc-001",
             category: "Electronics",
@@ -64,10 +70,47 @@ const handler = (_request: Request) => {
         }
     ];
 
+    // Filter items based on query parameters
+    let filteredItems = allItems;
+
+    // Filter by name (case insensitive, partial match)
+    if (name) {
+        filteredItems = filteredItems.filter(item => 
+            item.item.toLowerCase().includes(name.toLowerCase())
+        );
+    }
+
+    // Filter by price (support range like "500-700" or exact price)
+    if (price) {
+        if (price.includes('-')) {
+            const [min, max] = price.split('-').map(p => parseFloat(p.replace('$', '')));
+            filteredItems = filteredItems.filter(item => 
+                item.price_usd >= min && item.price_usd <= max
+            );
+        } else {
+            const exactPrice = parseFloat(price.replace('$', ''));
+            filteredItems = filteredItems.filter(item => 
+                item.price_usd === exactPrice
+            );
+        }
+    }
+
+    // Filter by location (case insensitive, partial match)
+    if (location) {
+        filteredItems = filteredItems.filter(item => 
+            item.location.toLowerCase().includes(location.toLowerCase())
+        );
+    }
+
     return Response.json({
         success: true,
-        total_items: marketplaceItems.length,
-        items: marketplaceItems,
+        total_items: filteredItems.length,
+        filters_applied: {
+            name: name || null,
+            price: price || null,
+            location: location || null
+        },
+        items: filteredItems,
         timestamp: new Date().toISOString(),
     });
 };
