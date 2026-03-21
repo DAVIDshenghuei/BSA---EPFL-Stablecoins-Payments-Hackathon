@@ -1,367 +1,528 @@
-# BSA x TON - Stablecoins & Payments Hackathon Starter
+# BSA x TON - x402 Payment Protocol with Telegram Bot
 
-Welcome to the [BSA](https://bsaepfl.ch/) x [TON](https://ton.org/) **Stablecoins & Payments Hackathon** official starter kit!
+A complete implementation of the **x402 protocol** (HTTP 402 Payment Required) on the **TON blockchain**, featuring a **Telegram Bot** interface for seamless micropayments. Built for the BSA x TON Stablecoins & Payments Hackathon.
 
-This starter was built by BSA members [Stan](https://github.com/hliosone) and [Loris](https://github.com/Loris-EPFL), feel free to reach out to Loris only for questions, bug reports, or anything else.
+This starter provides a **fully working pay-per-use API infrastructure** with a Telegram bot frontend, allowing users to make payments and receive data directly in Telegram chats using **BSA USD** stablecoin on TON testnet.
 
-The goal of this kit is to give you a **fully working pay-per-use API infrastructure** out of the box if you planned to use x402 with TON (you can of course build anything you want), so you can focus on building your product instead of plumbing payment logic. It implements the **x402 protocol** (HTTP 402 Payment Required) on the **TON blockchain**, using **BSA USD** (our testnet stablecoin) as the payment token (TON token is also supported).
-
----
-
-## Tech Stack
-
-This starter is a **pnpm monorepo** built with:
-
-- [TypeScript](https://www.typescriptlang.org/) for everything
-- [Next.js 15](https://nextjs.org/) for the example server (App Router)
-- [TON SDK](https://github.com/ton-org/ton) (`@ton/ton`, `@ton/core`, `@ton/crypto`) for blockchain interactions
-- [pnpm](https://pnpm.io/) for package management
-- **BSA USD** - our TEP-74 Jetton stablecoin deployed on TON testnet
+**Built by**: [Stan](https://github.com/hliosone) and [Loris](https://github.com/Loris-EPFL) from BSA  
+**Questions?**: Reach out to Loris
 
 ---
 
-## Project Structure
+## 🎯 What's Inside
+
+- **Telegram Bot** - Natural language interface for x402 payments
+- **Next.js API Server** - Payment-protected endpoints
+- **x402 Protocol** - HTTP 402 Payment Required implementation
+- **TON Integration** - BSA USD Jetton payments on TON blockchain
+- **Built-in Facilitator** - Transaction verification and settlement
+
+---
+
+## 🛠 Tech Stack
+
+This is a **pnpm monorepo** built with:
+
+- **[TypeScript](https://www.typescriptlang.org/)** - Type-safe development
+- **[Next.js 15](https://nextjs.org/)** - API server with App Router
+- **[TON SDK](https://github.com/ton-org/ton)** - Blockchain interactions (`@ton/ton`, `@ton/core`, `@ton/crypto`)
+- **[Telegram Bot API](https://core.telegram.org/bots/api)** - Bot interface
+- **[pnpm](https://pnpm.io/)** - Fast, disk space efficient package manager
+- **BSA USD** - TEP-74 Jetton stablecoin on TON testnet
+
+---
+
+## 📁 Project Structure
 
 ```
-ton-x402-hackathon-starter/
+bsa-sp-template-x402-2026/
 ├── packages/
-│   ├── core/           # Shared types, protocol headers, encoding utils
-│   ├── client/         # x402Fetch - drop-in fetch wrapper that handles the payment flow
-│   ├── middleware/     # paymentGate - wraps any Next.js route handler with payment logic
-│   └── facilitator/    # BOC verification + on-chain settlement (broadcast + poll)
+│   ├── core/           # Protocol types, headers, encoding utilities
+│   ├── client/         # x402Fetch - automated payment flow handler
+│   ├── middleware/     # paymentGate - Next.js route protection
+│   └── facilitator/    # Transaction verification & settlement
 │
 └── examples/
-    ├── nextjs-server/  # Full Next.js app with paid routes + built-in facilitator endpoints
-    └── client-script/  # CLI script to test payments end-to-end
+    ├── nextjs-server/  # API server with payment-protected routes
+    │   ├── app/api/
+    │   │   ├── weather/        # Weather data endpoint (0.01 BSA USD)
+    │   │   ├── joke/           # Developer jokes (0.01 BSA USD)
+    │   │   └── facilitator/    # Built-in facilitator service
+    │   └── .env.local          # Configuration file
+    │
+    └── client-script/  # Payment client & Telegram bot
+        ├── src/
+        │   ├── telegram-bot.ts # Telegram bot implementation
+        │   └── pay.ts          # CLI payment script
+        ├── start-bot.sh        # Bot startup script (WSL)
+        ├── start-bot.ps1       # Bot startup script (PowerShell)
+        ├── TELEGRAM_BOT_README.md
+        └── TROUBLESHOOTING.md
 ```
 
-### Packages at a glance
+### 📦 Packages Overview
 
-> These four packages were built from scratch by Stan and Loris specifically for this hackathon starter. They are not published on npm, they live in `packages/` and are linked locally via pnpm workspaces. You can read, extend, or fork them freely.
-
-| Package | What it does |
-|---|---|
-| `@ton-x402/core` | Protocol types (`PaymentRequired`, `PaymentPayload`, `SettlementResponse`), header encode/decode, TON utilities |
-| `@ton-x402/client` | `x402Fetch(url, config)` - wraps native `fetch`, auto-handles the 402 -> sign -> retry flow |
-| `@ton-x402/middleware` | `paymentGate(handler, { config })` - wraps a Next.js route handler, adding payment verification before calling your code |
-| `@ton-x402/facilitator` | `createVerifyHandler` / `createSettleHandler` - HTTP handlers for the facilitator API, which verifies BOCs offline and broadcasts on-chain |
+| Package | Description |
+|---------|-------------|
+| **@ton-x402/core** | Protocol types, header encoding/decoding, TON utilities |
+| **@ton-x402/client** | `x402Fetch()` - Handles 402 → sign → retry flow automatically |
+| **@ton-x402/middleware** | `paymentGate()` - Wraps Next.js routes with payment verification |
+| **@ton-x402/facilitator** | Verification & settlement handlers for transactions |
 
 ---
 
-## Quickstart
+## 🚀 Quick Start
 
 ### Prerequisites
 
-**To run the server** (required for everyone):
+**Required for everyone:**
 - [Node.js](https://nodejs.org/) >= 18
-- [pnpm](https://pnpm.io/) - install with `npm i -g pnpm`
-- A Toncenter API key (free at [toncenter.com](https://toncenter.com))
-- A TON wallet address to receive payments (just the address, no mnemonic needed server-side)
+- [pnpm](https://pnpm.io/) - Install: `npm i -g pnpm`
+- [WSL](https://docs.microsoft.com/en-us/windows/wsl/install) (Windows users) - Required for running the bot
+- [Toncenter API key](https://toncenter.com) - Free API key
+- TON wallet address (for receiving payments)
 
-**To run our client test scripts** (`pnpm dev:client`, `pnpm dev:client:joke`) - optional:
-- A TON testnet wallet with its 24-word mnemonic (e.g. Tonkeeper, switch to testnet mode)
-- Testnet TON (for gas) and testnet BSA USD (for payments) on that wallet
+**For Telegram Bot (optional but recommended):**
+- Telegram Bot Token (create via [@BotFather](https://t.me/botfather))
+- TON testnet wallet with 24-word mnemonic
+- Testnet funds (TON for gas, BSA USD for payments)
 
-### 1. Clone the repo
+---
+
+### 1️⃣ Clone & Install
 
 ```bash
 git clone git@github.com:bsaepfl/bsa-sp-template-x402-2026.git
 cd bsa-sp-template-x402-2026
-```
-
-### 2. Install dependencies and build packages
-
-```bash
 pnpm install
 pnpm build
 ```
 
-### 3. Configure the environment
+---
+
+### 2️⃣ Configure Environment
 
 ```bash
 cd examples/nextjs-server
 cp .env.example .env.local
 ```
 
-Open `.env.local` and fill in your values:
+Edit `.env.local`:
 
 ```env
-# TON network: "testnet" or "mainnet"
+# Network configuration
 TON_NETWORK=testnet
 
-# Your wallet address - this is where your server receives payments
-PAYMENT_ADDRESS=your_ton_wallet_address_here
+# Server wallet (receives payments) - ADDRESS ONLY, no private key needed
+PAYMENT_ADDRESS=0QB_twkoUKiLUFxXIZ0n0hIo75-jOIVLALnp3GimcBPR0Sxa
 
-# BSA USD Jetton master contract on TON testnet (pre-filled)
+# BSA USD Jetton master contract (testnet)
 JETTON_MASTER_ADDRESS=kQCd6G7c_HUBkgwtmGzpdqvHIQoNkYOEE0kSWoc5v57hPPnW
 
-# Facilitator URL - the Next.js app ships a built-in facilitator at /api/facilitator
+# Facilitator endpoint (built-in)
 FACILITATOR_URL=http://localhost:3000/api/facilitator
-#FACILITATOR_URL=https://ton-x402-nextjs-server-lqa1jowhn-hliosones-projects.vercel.app/api/facilitator
 
-# Toncenter RPC (get a free API key at https://toncenter.com)
+# TON RPC endpoint
 TON_RPC_URL=https://testnet.toncenter.com/api/v2/jsonRPC
 RPC_API_KEY=your_toncenter_api_key_here
 
-# 24-word mnemonic of the wallet used by the client-script examples to PAY endpoints
-# Only needed to run pnpm dev:client / pnpm dev:client:joke - not used by the server at all
+# Client wallet (sends payments) - 24-WORD MNEMONIC
+# Used by bot and CLI scripts to make payments
 WALLET_MNEMONIC="word1 word2 word3 ... word24"
 ```
 
-> **Note on `PAYMENT_ADDRESS` vs `WALLET_MNEMONIC`:** `PAYMENT_ADDRESS` is just an address - it's where your server *receives* payments, and the server never needs the private key. `WALLET_MNEMONIC` is the 24-word seed of the *client* wallet that *sends* payments, and is only used by our test scripts in `examples/client-script/`. If you're building your own client, you won't need `WALLET_MNEMONIC` at all - just implement the same signing logic with your own wallet setup.
+> **Important**: 
+> - `PAYMENT_ADDRESS` = Where your server **receives** payments (public address only)
+> - `WALLET_MNEMONIC` = Bot's wallet that **sends** payments (private key needed)
 
-### 4. Get testnet funds (only needed to run the client test scripts)
+---
 
-If you want to run `pnpm dev:client` or `pnpm dev:client:joke` to test payments end-to-end, the wallet from your `WALLET_MNEMONIC` needs:
+### 3️⃣ Get Testnet Funds
 
-**Testnet TON** (for gas fees):
-- Use the Telegram bot [@testgiver_ton_bot](https://t.me/testgiver_ton_bot) to get free testnet TON
+Your bot's wallet (from `WALLET_MNEMONIC`) needs:
 
-**Testnet BSA USD** (the payment token):
-- Use our [BSA USD faucet](https://ton-x402-nextjs-server-dyvpwctew-hliosones-projects.vercel.app/) to receive BSA USD on TON testnet
+**Testnet TON** (for gas):
+```
+Telegram: @testgiver_ton_bot
+```
 
-> If you're only running the server and building your own client, you can skip this step.
+**Testnet BSA USD** (for payments):
+```
+Faucet: https://ton-x402-nextjs-server-dyvpwctew-hliosones-projects.vercel.app/
+```
 
-### 5. Start the server
+---
 
-From the **repo root**:
+### 4️⃣ Start the API Server
+
+From repo root:
 
 ```bash
 pnpm dev
 ```
 
-This starts the Next.js dev server at `http://localhost:3000`. Visit it to see a landing page explaining the protocol and a quickstart guide.
+✅ Server running at: `http://localhost:3000`
 
-### 6. Test a payment end-to-end
+---
 
-In a separate terminal, still from the **repo root**:
+### 5️⃣ Start the Telegram Bot
+
+**Option A: Using WSL (Recommended)**
 
 ```bash
-# Pay for weather data (0.01 BSA USD)
-pnpm dev:client
-
-# Pay for a developer joke (0.01 BSA USD)
-pnpm dev:client:joke
+cd examples/client-script
+bash start-bot.sh
 ```
 
-You should see output like:
+**Option B: Using PowerShell**
+
+```powershell
+cd examples/client-script
+.\start-bot.ps1
+```
+
+**Option C: Direct command**
+
+```bash
+cd examples/client-script
+npx tsx --env-file=../nextjs-server/.env.local src/telegram-bot.ts
+```
+
+You should see:
 
 ```
-💰 Wallet: 0QA...
-💎 Balance: 12.5 TON
-🔢 Seqno: 3
-
-🌐 Requesting: http://localhost:3000/api/weather
-💸 Payment required: 1.0 BSA USD
-🪙 Asset: Jetton (kQCd6G7...)
-📍 Pay to: EQB...
-🌐 Network: testnet
-
-🔐 Signing payment: 1.0 BSA USD to EQB...
-✅ Payment confirmed!
-📝 TX Hash: 8f3a...
-🌐 Network: testnet
-
-📦 Resource data:
-{
-  "location": "Lausanne, Switzerland",
-  "temperature": 22,
-  ...
-}
+🤖 Starting Telegram Bot...
+📱 Bot Token: 8449323987...
+✅ Bot connected: @YourBotName
+👤 Bot name: YourBot
+🔄 Listening for messages...
 ```
 
 ---
 
-## Adding a Paid Route to Your App
+### 6️⃣ Test the Bot
 
-This is the core of what you'll be doing during the hackathon. It takes **3 lines** to protect any API route.
+1. Open your bot in Telegram: `https://t.me/YourBotName`
+2. Send `/start` to see the welcome message
+3. Send `weather` to trigger a payment and get weather data
 
-### Server side
+**Expected flow:**
 
-Create `app/api/my-endpoint/route.ts`:
+```
+You: weather
+
+Bot: ⏳ Fetching weather data and processing payment...
+     Please wait...
+
+Bot: 🌤️ Weather Data
+     
+     📍 Location: Lausanne, Switzerland
+     🌡️ Temperature: 22°C
+     ☁️ Conditions: Partly cloudy
+     💧 Humidity: 45%
+     🕐 Time: 3/21/2026, 8:36:07 PM
+     
+     ✅ Payment Confirmed
+     🔗 Transaction Hash: 81c052bd873ab925c303daf2d07f32973452747fd4a7c2f445d3e38887476d7c
+     🌐 Network: testnet
+```
+
+---
+
+## 💬 Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message and usage instructions |
+| `/help` | Help information about the bot |
+| `weather` or `/weather` | Get weather data (costs 0.01 BSA USD) |
+
+---
+
+## 🔄 How It Works
+
+### Architecture Overview
+
+```
+┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+│   Telegram  │      │     Bot     │      │ API Server  │      │ TON Network │
+│    User     │◄────►│  (Client)   │◄────►│ (Next.js)   │◄────►│ (Testnet)   │
+└─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
+                            │                      │
+                            │                      │
+                            └──────────────────────┘
+                                   Facilitator
+```
+
+### Payment Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Bot
+    participant Server
+    participant Facilitator
+    participant TON
+
+    User->>Bot: "weather"
+    Bot->>Server: GET /api/weather
+    Server-->>Bot: 402 Payment Required (payment details)
+    
+    Note over Bot: Generate & sign<br/>payment transaction
+    
+    Bot->>Server: GET /api/weather + PAYMENT-SIGNATURE
+    Server->>Facilitator: POST /verify (validate signature)
+    Facilitator-->>Server: ✅ Valid
+    
+    Server->>Facilitator: POST /settle (broadcast transaction)
+    Facilitator->>TON: Broadcast BOC
+    TON-->>Facilitator: Transaction confirmed
+    Facilitator-->>Server: { success: true, txHash }
+    
+    Server-->>Bot: 200 OK + weather data + txHash
+    Bot-->>User: 🌤️ Weather Data + confirmation
+```
+
+---
+
+## 🔧 Advanced Usage
+
+### Testing with CLI (Without Bot)
+
+```bash
+# Test weather endpoint
+pnpm dev:client
+
+# Test joke endpoint
+pnpm dev:client:joke
+```
+
+### Adding New Payment-Protected Routes
+
+**Server side** (`app/api/my-endpoint/route.ts`):
 
 ```typescript
 import { paymentGate } from "@ton-x402/middleware";
 import { getPaymentConfig } from "../../../lib/payment-config";
 
 const handler = (_request: Request) => {
-    return Response.json({ secret: "Here is your premium data!" });
+    return Response.json({ 
+        message: "This is premium content!",
+        secret: "Only available after payment"
+    });
 };
 
 export const GET = paymentGate(handler, {
     config: getPaymentConfig({
         amount: "10000000",  // 0.01 BSA USD (9 decimals)
         asset: process.env.JETTON_MASTER_ADDRESS,
-        description: "My premium endpoint (0.01 BSA USD)",
+        description: "Premium content (0.01 BSA USD)",
         decimals: 9,
     }),
 });
 ```
 
-That's it. `paymentGate` handles everything:
-- Returns `402` with payment instructions if no payment is attached
-- Calls the facilitator to verify the signature
-- Broadcasts the transaction on-chain and waits for confirmation
-- Calls your handler only once payment is confirmed
-- Adds the `PAYMENT-RESPONSE` header (with TX hash) to the response
-
-### Client side
+**Add bot command** (in `telegram-bot.ts`):
 
 ```typescript
-import { x402Fetch } from "@ton-x402/client";
-import { mnemonicToPrivateKey } from "@ton/crypto";
-import { WalletContractV5R1, TonClient } from "@ton/ton";
-
-const keypair = await mnemonicToPrivateKey(process.env.WALLET_MNEMONIC!.split(" "));
-const wallet = WalletContractV5R1.create({ publicKey: keypair.publicKey, workchain: 0 });
-const client = new TonClient({ endpoint: process.env.TON_RPC_URL!, apiKey: process.env.RPC_API_KEY });
-const walletContract = client.open(wallet);
-const seqno = await walletContract.getSeqno();
-
-const result = await x402Fetch("http://localhost:3000/api/my-endpoint", {
-    wallet,
-    keypair,
-    seqno,
-    client,
-});
-
-if (result.response.ok) {
-    const data = await result.response.json();
-    console.log(data); // { secret: "Here is your premium data!" }
-    console.log("TX Hash:", result.settlement?.txHash);
+if (text === "premium" || text === "/premium") {
+    await sendMessage(chatId, "⏳ Fetching premium content...");
+    
+    const result = await getDataFromEndpoint("http://localhost:3000/api/my-endpoint");
+    // Handle response...
 }
 ```
 
-`x402Fetch` is a drop-in replacement for `fetch`. It:
-1. Makes the first request
-2. If it gets a `402`, builds and signs the payment BOC locally
-3. Retries with the `PAYMENT-SIGNATURE` header
-4. Returns the final response + settlement info (TX hash, network)
-
 ---
 
-## Example API Routes
+## 📋 Available Scripts
 
-The starter ships with three working paid endpoints:
-
-| Route | Price | Description |
-|---|---|---|
-| `GET /api/weather` | 0.01 BSA USD | Dummy weather data for Lausanne |
-| `GET /api/joke` | 0.01 BSA USD | Random developer joke |
-| `GET /api/premium-content` | 0.01 BSA USD | Generic premium content with a secret code |
-
-Each is protected with `paymentGate` using the BSA USD Jetton. Look at their source in `examples/nextjs-server/app/api/` for reference implementations.
-
----
-
-## The Facilitator
-
-The **facilitator** is a small HTTP service with two endpoints:
-
-- `POST /verify` - validates the signed BOC offline: checks recipient address, amount, asset type, network. Fast, no on-chain call.
-- `POST /settle` - broadcasts the BOC to the TON network and polls for confirmation (up to 60s by default). Returns the TX hash on success.
-
-In this starter, the facilitator **lives inside the Next.js app** at `/api/facilitator/verify` and `/api/facilitator/settle`. This means you don't need to run a separate service - everything is self-contained.
-
-```typescript
-// examples/nextjs-server/app/api/facilitator/shared.ts
-import { createVerifyHandler, createSettleHandler } from "@ton-x402/facilitator";
-
-const config = {
-    tonRpcUrl: process.env.TON_RPC_URL ?? "https://testnet.toncenter.com/api/v2/jsonRPC",
-    tonApiKey: process.env.RPC_API_KEY,
-};
-
-export const verifyHandler = createVerifyHandler(config);
-export const settleHandler = createSettleHandler(config);
-```
-
-If you want to deploy the facilitator separately (recommended for production), just expose these handlers behind any HTTP server.
-
----
-
-## Environment Variables Reference
-
-| Variable | Required | Description |
-|---|---|---|
-| `TON_NETWORK` | Yes | `testnet` or `mainnet` |
-| `PAYMENT_ADDRESS` | Yes | TON wallet address that receives payments (your server's wallet) |
-| `JETTON_MASTER_ADDRESS` | Yes | BSA USD master contract - pre-filled for testnet |
-| `FACILITATOR_URL` | No | URL of the facilitator service. Defaults to `http://localhost:3000/api/facilitator` |
-| `TON_RPC_URL` | No | Toncenter RPC endpoint. Defaults to testnet |
-| `RPC_API_KEY` | Recommended | Your Toncenter API key - required to avoid rate limits |
-| `WALLET_MNEMONIC` | Only for client scripts | 24-word mnemonic of the wallet that *pays* endpoints - only used by `pnpm dev:client` / `pnpm dev:client:joke`. The server never touches it. |
-
----
-
-## Scripts Reference
-
-All scripts are run from the **repo root** with pnpm:
+Run from **repo root**:
 
 | Command | Description |
-|---|---|
-| `pnpm install` | Install all dependencies across the monorepo |
-| `pnpm build` | Build all packages (`core`, `client`, `middleware`, `facilitator`) |
-| `pnpm dev` | Start the Next.js dev server at `localhost:3000` |
-| `pnpm dev:client` | Run the client script - pays the `/api/weather` endpoint |
-| `pnpm dev:client:joke` | Run the client script - pays the `/api/joke` endpoint |
-| `pnpm address` | Display wallet address formats (useful for debugging) |
-| `pnpm clean` | Delete all compiled output from `packages/*/dist` |
-| `pnpm typecheck` | Run TypeScript type checking across all packages |
+|---------|-------------|
+| `pnpm install` | Install all dependencies |
+| `pnpm build` | Build all packages |
+| `pnpm dev` | Start Next.js server (`localhost:3000`) |
+| `pnpm dev:bot` | Start Telegram bot |
+| `pnpm dev:client` | Test CLI payment (weather) |
+| `pnpm dev:client:joke` | Test CLI payment (joke) |
+| `pnpm address` | Show wallet address formats |
+| `pnpm clean` | Delete build output |
+| `pnpm typecheck` | Run TypeScript checks |
 
 ---
 
-## What is x402?
+## 🐛 Troubleshooting
 
-x402 is an open protocol for **machine-to-machine HTTP micropayments**. The idea is simple:
+### Bot Not Responding
 
-1. A client requests a protected resource (e.g. `GET /api/weather`)
-2. The server responds **402 Payment Required** with payment instructions
-3. The client signs a payment transaction **locally** (nothing is broadcast yet)
-4. The client retries the request with the signed transaction attached
-5. The server sends the signed transaction to a **facilitator**, which verifies it, broadcasts it on-chain, and waits for confirmation
-6. Once confirmed, the server unlocks the resource and returns it, along with the on-chain TX hash
+1. Check if bot is running: `ps aux | grep telegram-bot`
+2. Verify server is running: `curl http://localhost:3000`
+3. Check bot token is correct in code
+4. View logs in terminal where bot is running
 
-No wallets to connect. No web UI needed. Just HTTP headers and cryptographic signatures.
+### Duplicate Messages
 
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    participant Facilitator
-    participant TON
+If receiving multiple replies:
+- **Cause**: Multiple bot instances running
+- **Fix**: Run `pkill -f telegram-bot` then restart
 
-    Client->>Server: GET /api/weather
-    Server-->>Client: 402 Payment Required (PAYMENT-REQUIRED header)
+### Payment Failed
 
-    Note over Client: Signs BOC locally (Jetton / TON)
+- Verify wallet has sufficient TON (for gas)
+- Check wallet has BSA USD tokens
+- Confirm `PAYMENT_ADDRESS` is correct
+- Ensure facilitator service is running
 
-    Client->>Server: GET + PAYMENT-SIGNATURE header
-    Server->>Facilitator: POST /verify (offline check)
-    Facilitator-->>Server: { valid: true }
+See `examples/client-script/TROUBLESHOOTING.md` for detailed troubleshooting.
 
-    Server->>Facilitator: POST /settle (broadcast + confirm)
-    Facilitator->>TON: Broadcast signed BOC
-    TON-->>Facilitator: Transaction confirmed
-    Facilitator-->>Server: { success: true, txHash }
+---
 
-    Server-->>Client: 200 OK + data + PAYMENT-RESPONSE header
+## 🌐 API Endpoints
+
+### Payment-Protected Routes
+
+| Endpoint | Price | Description |
+|----------|-------|-------------|
+| `GET /api/weather` | 0.01 BSA USD | Weather data for Lausanne |
+| `GET /api/joke` | 0.01 BSA USD | Random developer joke |
+
+### Facilitator Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/facilitator/verify` | POST | Validate signed BOC offline |
+| `/api/facilitator/settle` | POST | Broadcast transaction and confirm |
+
+---
+
+## 🔐 Security Notes
+
+⚠️ **Important Security Practices:**
+
+- **Never commit** `.env.local` to version control
+- Keep your **Bot Token** secure
+- Protect your **wallet mnemonic** (never share it)
+- Use environment variables for all sensitive data
+- In production, deploy facilitator as separate service
+- Use webhooks instead of polling in production
+
+---
+
+## 📚 Documentation
+
+- **Telegram Bot**: `examples/client-script/TELEGRAM_BOT_README.md`
+- **Troubleshooting**: `examples/client-script/TROUBLESHOOTING.md`
+- **Translation Guide**: `examples/client-script/TRANSLATION_SUMMARY.md`
+
+---
+
+## 🔗 Useful Resources
+
+### TON Ecosystem
+- [TON Documentation](https://docs.ton.org)
+- [Toncenter API](https://toncenter.com) - RPC endpoint & API key
+- [Tonkeeper Wallet](https://tonkeeper.com) - Testnet-enabled wallet
+- [TEP-74 Jetton Standard](https://github.com/ton-blockchain/TEPs/blob/master/text/0074-jettons-standard.md)
+
+### Testnet Faucets
+- **TON**: [@testgiver_ton_bot](https://t.me/testgiver_ton_bot)
+- **BSA USD**: [Faucet](https://ton-x402-nextjs-server-dyvpwctew-hliosones-projects.vercel.app/)
+
+### Telegram
+- [Bot API Documentation](https://core.telegram.org/bots/api)
+- [BotFather](https://t.me/botfather) - Create & manage bots
+- [Bot Updates](https://core.telegram.org/bots/api#getting-updates) - Polling vs Webhooks
+
+### BSA
+- [BSA Website](https://bsaepfl.ch)
+- [BSA GitHub](https://github.com/bsaepfl)
+
+---
+
+## 🎯 What is x402?
+
+**x402** is an open protocol for **machine-to-machine HTTP micropayments**:
+
+1. **Client requests** a protected resource
+2. **Server responds** with `402 Payment Required` + payment instructions
+3. **Client signs** a payment transaction locally (offline)
+4. **Client retries** with signed transaction attached
+5. **Facilitator verifies** signature and broadcasts to blockchain
+6. **Server unlocks** resource after payment confirmation
+
+**Key Benefits:**
+- ✅ No wallet popups or browser extensions
+- ✅ No user interaction required
+- ✅ Perfect for APIs and automation
+- ✅ Cryptographically secure
+- ✅ On-chain settlement with proof
+
+---
+
+## 📊 Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TON_NETWORK` | ✅ | `testnet` or `mainnet` |
+| `PAYMENT_ADDRESS` | ✅ | Server wallet (receives payments) |
+| `JETTON_MASTER_ADDRESS` | ✅ | BSA USD contract address |
+| `FACILITATOR_URL` | ⚠️ | Facilitator endpoint (defaults to built-in) |
+| `TON_RPC_URL` | ⚠️ | Toncenter RPC (defaults to testnet) |
+| `RPC_API_KEY` | ⚠️ | API key (recommended to avoid rate limits) |
+| `WALLET_MNEMONIC` | ✅* | Bot/client wallet (24 words) - *only for bot/CLI |
+
+---
+
+## 🚀 Production Deployment
+
+### Recommended Architecture
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Telegram    │────►│   Bot Server │────►│  API Server  │
+│  (Frontend)  │     │  (Railway)   │     │  (Vercel)    │
+└──────────────┘     └──────────────┘     └──────────────┘
+                              │                    │
+                              │                    │
+                              ▼                    ▼
+                     ┌──────────────┐     ┌──────────────┐
+                     │ Facilitator  │     │ TON Mainnet  │
+                     │  (Railway)   │     │              │
+                     └──────────────┘     └──────────────┘
 ```
 
----
+### Deployment Tips
 
-## Useful Links
-
-- [TON Documentation](https://docs.ton.org)
-- [Toncenter API](https://toncenter.com) - free RPC endpoint + API key
-- [Tonkeeper Wallet](https://tonkeeper.com) - mobile wallet with testnet mode
-- [@testgiver_ton_bot](https://t.me/testgiver_ton_bot) - testnet TON faucet
-- [BSA USD Faucet](https://ton-x402-nextjs-server-dyvpwctew-hliosones-projects.vercel.app/) - testnet BSA USD faucet
-- [TEP-74 Jetton Standard](https://github.com/ton-blockchain/TEPs/blob/master/text/0074-jettons-standard.md) - the token standard used for BSA USD
-- [BSA Website](https://bsaepfl.ch)
+1. **API Server** → Vercel, Netlify, or Railway
+2. **Bot** → Railway (24/7 uptime needed)
+3. **Facilitator** → Separate service (security)
+4. **Use Webhooks** instead of polling for bot
+5. **Switch to mainnet** for production
+6. **Secure environment variables** in deployment platform
 
 ---
 
-## License
+## 📄 License
 
 MIT
+
+---
+
+## 🙏 Credits
+
+Built with ❤️ by [Stan](https://github.com/hliosone) and [Loris](https://github.com/Loris-EPFL) for the BSA x TON Hackathon.
+
+---
+
+## 🆘 Support
+
+- **Issues**: Open an issue on GitHub
+- **Questions**: Contact Loris
+- **Documentation**: Check the `/examples/client-script/` docs
+- **Community**: Join the BSA Discord
+
+---
+
+**Happy Hacking! 🚀**
