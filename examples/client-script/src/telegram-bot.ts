@@ -127,6 +127,85 @@ function formatWeatherMessage(data: any, settlement?: any): string {
     return message;
 }
 
+// Format marketplace data as Telegram message
+function formatMarketplaceMessage(data: any, settlement?: any): string {
+    let message = "🛍️ **Marketplace Items**\n\n";
+    message += `📊 **Total Items**: ${data.total_items}\n\n`;
+    
+    data.items.forEach((item: any, index: number) => {
+        message += `**${index + 1}. ${item.item}**\n`;
+        message += `💰 Price: $${item.price_usd}\n`;
+        message += `🏪 Seller: ${item.seller} (⭐ ${item.trust_score}%)\n`;
+        message += `📍 Location: ${item.location}\n`;
+        message += `📦 Condition: ${item.condition}\n`;
+        message += `🚚 Delivery: ${item.delivery_speed}\n`;
+        message += `🏷️ Tags: ${item.tags.join(", ")}\n\n`;
+    });
+    
+    if (settlement?.txHash) {
+        message += `✅ **Payment Confirmed**\n`;
+        message += `🔗 **TX Hash**: \`${settlement.txHash}\`\n`;
+        message += `🌐 **Network**: ${settlement.network}\n`;
+    }
+    
+    return message;
+}
+
+// Get marketplace data (trigger payment flow)
+async function getMarketplaceData() {
+    const mnemonic = process.env.WALLET_MNEMONIC;
+    if (!mnemonic) {
+        throw new Error("❌ Set WALLET_MNEMONIC env var (24-word mnemonic)");
+    }
+
+    const rpcUrl = process.env.TON_RPC_URL ?? "https://testnet.toncenter.com/api/v2/jsonRPC";
+    const resourceUrl = process.env.RESOURCE_URL ?? "http://localhost:3000/api/market";
+
+    const keypair = await mnemonicToPrivateKey(mnemonic.split(" "));
+    const wallet = WalletContractV5R1.create({
+        publicKey: keypair.publicKey,
+        workchain: 0,
+    });
+
+    const client = new TonClient({
+        endpoint: rpcUrl,
+        apiKey: process.env.RPC_API_KEY,
+    });
+    const walletContract = client.open(wallet);
+
+    const balance = await client.getBalance(wallet.address);
+    const seqno = await walletContract.getSeqno();
+
+    console.log(`💳 Wallet: ${wallet.address.toString({ bounceable: false })}`);
+    console.log(`💰 Balance: ${nanoToTon(balance.toString())} TON`);
+    console.log(`🔢 Seqno: ${seqno}`);
+
+    // Execute x402 payment flow
+    const result = await x402Fetch(resourceUrl, {
+        wallet,
+        keypair,
+        seqno,
+        client,
+        verbose: false,
+    });
+
+    if (result.response.ok) {
+        const data = await result.response.json();
+        return {
+            success: true,
+            data,
+            settlement: result.settlement,
+        };
+    } else {
+        const text = await result.response.text();
+        return {
+            success: false,
+            error: text,
+            paid: result.paid,
+        };
+    }
+}
+
 // Store processed message IDs to prevent duplicate processing
 const processedMessages = new Set<string>();
 
@@ -184,22 +263,51 @@ async function handleUpdate(update: TelegramUpdate) {
             await sendMessage(chatId, errorMessage);
             console.error("❌ Processing error:", error);
         }
+    } else if (text === "market" || text === "/market") {
+        // Send processing message
+        await sendMessage(chatId, "⏳ Fetching marketplace data and processing payment...\nPlease wait...");
+
+        try {
+            const result = await getMarketplaceData();
+
+            if (result.success) {
+                const message = formatMarketplaceMessage(result.data, result.settlement);
+                await sendMessage(chatId, message);
+                console.log("✅ Marketplace data sent successfully");
+            } else {
+                let errorMessage = "❌ **Payment Failed**\n\n";
+                if (result.paid) {
+                    errorMessage += "⚠️ Payment broadcasted but settlement failed (transaction may still confirm on-chain)\n\n";
+                }
+                errorMessage += `Error: ${result.error}`;
+                await sendMessage(chatId, errorMessage);
+                console.error("❌ Payment failed:", result.error);
+            }
+        } catch (error: any) {
+            const errorMessage = `❌ **Error**\n\n${error.message || String(error)}`;
+            await sendMessage(chatId, errorMessage);
+            console.error("❌ Processing error:", error);
+        }
     } else if (text === "/start" || text === "start") {
         const welcomeMessage = 
             `👋 Hello, ${username}!\n\n` +
-            `Welcome to the Weather Payment Bot!\n\n` +
+            `Welcome to the Payment Bot!\n\n` +
             `📝 **Available Commands**:\n` +
-            `• \`weather\` or \`/weather\` - Get weather data (requires payment of 0.01 BSA USD)\n\n` +
-            `💡 Type \`weather\` to try it out!`;
+            `• \`weather\` or \`/weather\` - Get weather data (0.01 BSA USD)\n` +
+            `• \`market\` or \`/market\` - Browse marketplace items (0.01 BSA USD)\n\n` +
+            `💡 Type a command to try it out!`;
         await sendMessage(chatId, welcomeMessage);
     } else if (text === "/help" || text === "help") {
         const helpMessage = 
             `📖 **Help**\n\n` +
-            `This bot uses the x402 protocol on the TON blockchain to fetch paid weather data.\n\n` +
+            `This bot uses the x402 protocol on the TON blockchain to fetch paid data.\n\n` +
+            `**Available Commands**:\n` +
+            `• \`weather\` - Weather information\n` +
+            `• \`market\` - Marketplace listings\n\n` +
             `**How to use**:\n` +
-            `1. Type \`weather\` or \`/weather\`\n` +
-            `2. The bot will automatically handle the payment (0.01 BSA USD)\n` +
-            `3. Receive weather data\n\n` +
+            `1. Type a command (e.g., \`market\`)\n` +
+            `2. The bot automatically handles payment (0.01 BSA USD)\n` +
+            `3. Receive the requested data\n\n` +
             `**Required**: Wallet must have sufficient TON balance`;
         await sendMessage(chatId, helpMessage);
     }
