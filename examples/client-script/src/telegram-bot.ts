@@ -257,7 +257,7 @@ function getSession(chatId: number): any[] | null {
 }
 
 // Buy an item via x402 payment (0.1 TON)
-async function buyItem(item: any) {
+async function buyItem(item: any, buyerName: string = "Bot User") {
     const mnemonic = process.env.WALLET_MNEMONIC;
     if (!mnemonic) {
         throw new Error("❌ Set WALLET_MNEMONIC env var (24-word mnemonic)");
@@ -270,6 +270,7 @@ async function buyItem(item: any) {
         price: String(item.price_usd),
         seller: item.seller,
         location: item.location,
+        buyer: buyerName,
     });
     const resourceUrl = `http://localhost:3000/api/buy?${params.toString()}`;
 
@@ -749,7 +750,7 @@ async function handleUpdate(update: TelegramUpdate) {
         await sendMessage(chatId, `⏳ Purchasing "${targetItem.item}" for 0.1 TON...\nProcessing x402 payment...`);
 
         try {
-            const result = await buyItem(targetItem);
+            const result = await buyItem(targetItem, username);
 
             if (result.success) {
                 const receipt = formatReceipt(result.data.receipt, result.settlement);

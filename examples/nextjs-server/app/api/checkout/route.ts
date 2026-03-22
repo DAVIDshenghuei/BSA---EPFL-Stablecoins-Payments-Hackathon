@@ -60,12 +60,31 @@ export async function POST(request: NextRequest) {
             const total = items.reduce((s: number, i: any) => s + (i.price ?? 0) * (i.quantity ?? 1), 0);
             const itemNames = items.map((i: any) => i.title ?? "item").join(", ");
 
+            const ts = Date.now().toString(36).toUpperCase();
             addReceipt({
-                id: `WEB-${Date.now().toString(36).toUpperCase()}`,
+                id: `WEB-${ts}`,
+                type: "purchase",
                 source: "web",
                 item: itemNames,
                 item_price_usd: total,
                 seller: "Wisemanager Shop",
+                location: "Web Checkout",
+                payment_amount: "0.1 TON",
+                payment_protocol: "x402",
+                status: "confirmed",
+                txHash,
+                network,
+                timestamp: new Date().toISOString(),
+            });
+
+            addReceipt({
+                id: `SALE-W-${ts}`,
+                type: "sale",
+                source: "web",
+                item: itemNames,
+                item_price_usd: total,
+                seller: "Wisemanager Shop",
+                buyer: "Web User",
                 location: "Web Checkout",
                 payment_amount: "0.1 TON",
                 payment_protocol: "x402",
