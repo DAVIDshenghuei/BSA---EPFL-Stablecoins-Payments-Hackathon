@@ -235,6 +235,102 @@ async function getMarketplaceData(filters?: { name?: string; price?: string; loc
     }
 }
 
+// Per-chat session: stores last market search results for the "buy" combo
+const chatSessions = new Map<number, { items: any[]; timestamp: number }>();
+
+const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+function setSession(chatId: number, items: any[]) {
+    chatSessions.set(chatId, { items, timestamp: Date.now() });
+}
+
+function getSession(chatId: number): any[] | null {
+    const session = chatSessions.get(chatId);
+    if (!session) return null;
+    if (Date.now() - session.timestamp > SESSION_TTL_MS) {
+        chatSessions.delete(chatId);
+        return null;
+    }
+    return session.items;
+}
+
+// Buy an item via x402 payment (0.1 TON)
+async function buyItem(item: any) {
+    const mnemonic = process.env.WALLET_MNEMONIC;
+    if (!mnemonic) {
+        throw new Error("❌ Set WALLET_MNEMONIC env var (24-word mnemonic)");
+    }
+
+    const rpcUrl = process.env.TON_RPC_URL ?? "https://testnet.toncenter.com/api/v2/jsonRPC";
+
+    const params = new URLSearchParams({
+        item: item.item,
+        price: String(item.price_usd),
+        seller: item.seller,
+        location: item.location,
+    });
+    const resourceUrl = `http://localhost:3000/api/buy?${params.toString()}`;
+
+    const keypair = await mnemonicToPrivateKey(mnemonic.split(" "));
+    const wallet = WalletContractV5R1.create({
+        publicKey: keypair.publicKey,
+        workchain: 0,
+    });
+
+    const client = new TonClient({
+        endpoint: rpcUrl,
+        apiKey: process.env.RPC_API_KEY,
+    });
+    const walletContract = client.open(wallet);
+
+    const balance = await client.getBalance(wallet.address);
+    const seqno = await walletContract.getSeqno();
+
+    console.log(`🛒 Buying: ${item.item}`);
+    console.log(`💳 Wallet: ${wallet.address.toString({ bounceable: false })}`);
+    console.log(`💰 Balance: ${nanoToTon(balance.toString())} TON`);
+
+    const result = await x402Fetch(resourceUrl, {
+        wallet,
+        keypair,
+        seqno,
+        client,
+        verbose: false,
+    });
+
+    if (result.response.ok) {
+        const data = await result.response.json();
+        return { success: true, data, settlement: result.settlement };
+    } else {
+        const text = await result.response.text();
+        return { success: false, error: text, paid: result.paid };
+    }
+}
+
+function formatReceipt(receipt: any, settlement?: any): string {
+    let msg = "🧾 PURCHASE RECEIPT\n";
+    msg += "━━━━━━━━━━━━━━━━━━━━\n\n";
+    msg += `📋 Receipt ID: ${receipt.id}\n`;
+    msg += `🛍️ Item: ${receipt.item}\n`;
+    msg += `💵 Item Price: $${receipt.item_price_usd}\n`;
+    msg += `🏪 Seller: ${receipt.seller}\n`;
+    msg += `📍 Location: ${receipt.location}\n\n`;
+    msg += "━━━━━━━━━━━━━━━━━━━━\n";
+    msg += `💎 Payment: ${receipt.payment_amount}\n`;
+    msg += `🔗 Protocol: ${receipt.payment_protocol}\n`;
+    msg += `✅ Status: ${receipt.status.toUpperCase()}\n`;
+    msg += `🕐 Time: ${new Date(receipt.timestamp).toLocaleString()}\n`;
+
+    if (settlement?.txHash) {
+        msg += `\n🔗 TX Hash: ${settlement.txHash}\n`;
+        msg += `🌐 Network: ${settlement.network}\n`;
+    }
+
+    msg += "\n━━━━━━━━━━━━━━━━━━━━\n";
+    msg += "Thank you for your purchase!";
+    return msg;
+}
+
 // Store processed message IDs to prevent duplicate processing
 const processedMessages = new Set<string>();
 
@@ -346,7 +442,24 @@ async function handleUpdate(update: TelegramUpdate) {
             const result = await getMarketplaceData(Object.keys(filters).length > 0 ? filters : undefined);
 
             if (result.success) {
-                const message = formatMarketplaceMessage(result.data, result.settlement);
+                // Save results to session for the "buy" combo
+                if (result.data.items && result.data.items.length > 0) {
+                    setSession(chatId, result.data.items);
+                }
+
+                let message = formatMarketplaceMessage(result.data, result.settlement);
+
+                // Append buy hint
+                if (result.data.items && result.data.items.length > 0) {
+                    message += "\n💡 Quick Buy:\n";
+                    if (result.data.items.length === 1) {
+                        message += `  Type "buy" to purchase this item (0.1 TON)\n`;
+                    } else {
+                        message += `  Type "buy <name>" to purchase (0.1 TON)\n`;
+                        message += `  e.g. buy ${result.data.items[0].item.split(" ").slice(0, 2).join(" ")}\n`;
+                    }
+                }
+
                 await sendMessage(chatId, message);
                 console.log("✅ Marketplace data sent successfully");
             } else {
@@ -363,38 +476,112 @@ async function handleUpdate(update: TelegramUpdate) {
             await sendMessage(chatId, errorMessage);
             console.error("❌ Processing error:", error);
         }
+    } else if (text.startsWith("buy") || text.startsWith("/buy")) {
+        const buyText = text.replace(/^\/buy|^buy/i, "").trim();
+        const sessionItems = getSession(chatId);
+
+        if (!sessionItems || sessionItems.length === 0) {
+            await sendMessage(chatId, "❌ No recent search results.\n\nUse 'market' first to browse items, then 'buy' to purchase.");
+            return;
+        }
+
+        let targetItem: any = null;
+
+        if (!buyText) {
+            // No name given — auto-buy only if exactly 1 item in session
+            if (sessionItems.length === 1) {
+                targetItem = sessionItems[0];
+            } else {
+                let msg = `🛍️ ${sessionItems.length} items in your last search. Specify which one:\n\n`;
+                sessionItems.forEach((it: any, i: number) => {
+                    msg += `${i + 1}. ${it.item} ($${it.price_usd})\n`;
+                });
+                msg += `\n💡 Type "buy <name>" e.g. buy ${sessionItems[0].item.split(" ").slice(0, 2).join(" ")}`;
+                await sendMessage(chatId, msg);
+                return;
+            }
+        } else {
+            // Fuzzy match by name
+            const query = buyText.toLowerCase();
+            const matches = sessionItems.filter((it: any) =>
+                it.item.toLowerCase().includes(query)
+            );
+
+            if (matches.length === 1) {
+                targetItem = matches[0];
+            } else if (matches.length > 1) {
+                let msg = `🔍 Multiple matches for "${buyText}":\n\n`;
+                matches.forEach((it: any, i: number) => {
+                    msg += `${i + 1}. ${it.item} ($${it.price_usd})\n`;
+                });
+                msg += "\n💡 Be more specific, e.g. buy " + matches[0].item;
+                await sendMessage(chatId, msg);
+                return;
+            } else {
+                await sendMessage(chatId, `❌ No item matching "${buyText}" in your last search.\n\n💡 Try 'market' again or use a different name.`);
+                return;
+            }
+        }
+
+        // Confirm and execute purchase
+        await sendMessage(chatId, `⏳ Purchasing "${targetItem.item}" for 0.1 TON...\nProcessing x402 payment...`);
+
+        try {
+            const result = await buyItem(targetItem);
+
+            if (result.success) {
+                const receipt = formatReceipt(result.data.receipt, result.settlement);
+                await sendMessage(chatId, receipt);
+                console.log(`✅ Purchase complete: ${targetItem.item}`);
+            } else {
+                let errorMsg = "❌ Purchase Failed\n\n";
+                if (result.paid) {
+                    errorMsg += "⚠️ Payment broadcasted but settlement pending\n\n";
+                }
+                errorMsg += `Error: ${result.error}`;
+                await sendMessage(chatId, errorMsg);
+                console.error("❌ Purchase failed:", result.error);
+            }
+        } catch (error: any) {
+            await sendMessage(chatId, `❌ Error\n\n${error.message || String(error)}`);
+            console.error("❌ Purchase error:", error);
+        }
     } else if (text === "/start" || text === "start") {
         const welcomeMessage = 
             `👋 Hello, ${username}!\n\n` +
             `Welcome to the Payment Bot!\n\n` +
             `📝 Available Commands:\n` +
             `• weather - Get weather data (0.01 BSA USD)\n` +
-            `• market - Browse all marketplace items (0.01 BSA USD)\n\n` +
-            `🔍 Market Filters (Natural Language):\n` +
+            `• market - Browse marketplace items (0.01 BSA USD)\n` +
+            `• buy - Purchase an item (0.1 TON)\n\n` +
+            `🔍 Market Filters:\n` +
             `• market MacBook\n` +
             `• market price 500-700\n` +
-            `• market in Lausanne\n` +
-            `• market laptop price 600-800 in Zurich\n\n` +
+            `• market in Lausanne\n\n` +
+            `🛒 Buy Combo (after market search):\n` +
+            `• buy - Auto-buy if only 1 result\n` +
+            `• buy MacBook - Buy matching item\n\n` +
             `💡 Just type naturally!`;
         await sendMessage(chatId, welcomeMessage);
     } else if (text === "/help" || text === "help") {
         const helpMessage = 
             `📖 Help\n\n` +
-            `This bot uses the x402 protocol on the TON blockchain to fetch paid data.\n\n` +
-            `Available Commands:\n` +
-            `• weather - Weather information\n` +
-            `• market - All marketplace listings\n\n` +
-            `Filter Examples (Natural Language):\n` +
-            `• market MacBook - Find MacBook items\n` +
-            `• market price 500-700 - Price $500-$700\n` +
-            `• market in Lausanne - Items in Lausanne\n` +
-            `• market laptop in Zurich - Laptops in Zurich\n` +
-            `• market Dell price 500-600 - Dell, $500-600\n\n` +
-            `How to use:\n` +
-            `1. Type a command naturally\n` +
-            `2. Bot handles payment (0.01 BSA USD)\n` +
-            `3. Receive filtered data\n\n` +
-            `Required: Wallet must have sufficient TON balance`;
+            `This bot uses the x402 protocol on the TON blockchain.\n\n` +
+            `Commands:\n` +
+            `• weather - Weather data (0.01 BSA USD)\n` +
+            `• market - Browse items (0.01 BSA USD)\n` +
+            `• buy - Purchase item (0.1 TON)\n\n` +
+            `Market Filters:\n` +
+            `• market MacBook\n` +
+            `• market price 500-700\n` +
+            `• market in Lausanne\n` +
+            `• market Dell price 500-600\n\n` +
+            `Buy Combo (market then buy):\n` +
+            `1. Search: market MacBook\n` +
+            `2. If 1 result: type "buy"\n` +
+            `3. If multiple: type "buy MacBook Air"\n` +
+            `4. Receipt generated after payment\n\n` +
+            `Each buy costs 0.1 TON via x402.`;
         await sendMessage(chatId, helpMessage);
     }
 }

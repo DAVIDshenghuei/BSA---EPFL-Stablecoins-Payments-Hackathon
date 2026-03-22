@@ -49,6 +49,9 @@ importers:
 
   examples/nextjs-server:
     dependencies:
+      '@ton-x402/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@ton-x402/core':
         specifier: workspace:*
         version: link:../../packages/core
