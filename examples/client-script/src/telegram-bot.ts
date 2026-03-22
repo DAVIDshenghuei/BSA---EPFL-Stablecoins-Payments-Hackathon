@@ -24,6 +24,8 @@ interface TelegramUpdate {
             username?: string;
         };
         text?: string;
+        caption?: string;
+        photo?: { file_id: string; width: number; height: number }[];
         date: number;
     };
 }
@@ -331,37 +333,257 @@ function formatReceipt(receipt: any, settlement?: any): string {
     return msg;
 }
 
+// ── Sell flow: multi-step conversation state machine ──
+
+type SellStep = "photo" | "name" | "price" | "category" | "location" | "description" | "confirm";
+
+interface SellDraft {
+    step: SellStep;
+    photoFileId?: string;
+    photoUrl?: string;
+    name?: string;
+    price?: number;
+    category?: string;
+    location?: string;
+    description?: string;
+    seller: string;
+}
+
+const sellSessions = new Map<number, SellDraft>();
+
+const CATEGORY_OPTIONS = ["electronics", "men's clothing", "women's clothing", "jewelery", "services", "other"];
+
+async function getPhotoUrl(fileId: string): Promise<string> {
+    const res = await fetch(`${TELEGRAM_API_URL}/getFile?file_id=${fileId}`);
+    const data = await res.json();
+    if (data.ok) {
+        return `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${data.result.file_path}`;
+    }
+    return "";
+}
+
+async function payListingFee(): Promise<{ success: boolean; txHash?: string; error?: string }> {
+    const mnemonic = process.env.WALLET_MNEMONIC;
+    if (!mnemonic) throw new Error("WALLET_MNEMONIC not set");
+
+    const rpcUrl = process.env.TON_RPC_URL ?? "https://testnet.toncenter.com/api/v2/jsonRPC";
+    const resourceUrl = "http://localhost:3000/api/sell";
+
+    const keypair = await mnemonicToPrivateKey(mnemonic.split(" "));
+    const wallet = WalletContractV5R1.create({ publicKey: keypair.publicKey, workchain: 0 });
+    const client = new TonClient({ endpoint: rpcUrl, apiKey: process.env.RPC_API_KEY });
+    const walletContract = client.open(wallet);
+
+    const balance = await client.getBalance(wallet.address);
+    const seqno = await walletContract.getSeqno();
+
+    console.log(`📤 Sell listing fee — Balance: ${nanoToTon(balance.toString())} TON`);
+
+    const result = await x402Fetch(resourceUrl, { wallet, keypair, seqno, client, verbose: false });
+
+    if (result.response.ok) {
+        return { success: true, txHash: result.settlement?.txHash };
+    } else {
+        const text = await result.response.text();
+        return { success: false, error: text };
+    }
+}
+
+async function publishProduct(draft: SellDraft): Promise<boolean> {
+    try {
+        const res = await fetch("http://localhost:3000/api/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title: draft.name,
+                price: draft.price,
+                category: draft.category,
+                description: draft.description,
+                image: "📦",
+                imageUrl: draft.photoUrl,
+                seller: draft.seller,
+                location: draft.location,
+                source: "bot",
+            }),
+        });
+        const data = await res.json();
+        return data.success === true;
+    } catch (err) {
+        console.error("❌ Failed to publish product:", err);
+        return false;
+    }
+}
+
+function formatDraftPreview(draft: SellDraft): string {
+    let msg = "📋 LISTING PREVIEW\n";
+    msg += "━━━━━━━━━━━━━━━━━━━━\n\n";
+    msg += `🛍️ Name: ${draft.name}\n`;
+    msg += `💰 Price: $${draft.price}\n`;
+    msg += `📂 Category: ${draft.category}\n`;
+    msg += `📍 Location: ${draft.location}\n`;
+    msg += `📝 Description: ${draft.description}\n`;
+    msg += draft.photoUrl ? `📸 Photo: attached\n` : `📸 Photo: none\n`;
+    msg += `🏪 Seller: ${draft.seller}\n\n`;
+    msg += "━━━━━━━━━━━━━━━━━━━━\n";
+    msg += `💎 Listing fee: 0.1 TON (x402)\n\n`;
+    msg += `Type "yes" to confirm and pay, or "cancel" to abort.`;
+    return msg;
+}
+
 // Store processed message IDs to prevent duplicate processing
 const processedMessages = new Set<string>();
 
 // Handle Telegram updates
 async function handleUpdate(update: TelegramUpdate) {
-    if (!update.message?.text) return;
+    if (!update.message) return;
 
     const chatId = update.message.chat.id;
     const messageId = update.message.message_id;
-    const text = update.message.text.toLowerCase().trim();
+    const text = (update.message.text ?? update.message.caption ?? "").toLowerCase().trim();
+    const rawText = update.message.text ?? update.message.caption ?? "";
     const username = update.message.from?.first_name || "User";
+    const hasPhoto = !!update.message.photo && update.message.photo.length > 0;
 
-    // Generate unique message ID
+    // Skip messages with neither text nor photo
+    if (!text && !hasPhoto) return;
+
+    // Dedup
     const uniqueMessageId = `${chatId}_${messageId}`;
-    
-    // Check if message was already processed
-    if (processedMessages.has(uniqueMessageId)) {
-        console.log(`⏭️ Skipping already processed message: ${uniqueMessageId}`);
-        return;
-    }
-    
-    // Mark as processed
+    if (processedMessages.has(uniqueMessageId)) return;
     processedMessages.add(uniqueMessageId);
-    
-    // Clean up old message IDs (keep latest 100)
     if (processedMessages.size > 100) {
         const firstItem = processedMessages.values().next().value;
         processedMessages.delete(firstItem);
     }
 
-    console.log(`📨 Received message: "${text}" from ${username} (${chatId})`);
+    console.log(`📨 Received: "${text || "(photo)"}" from ${username} (${chatId})`);
+
+    // ── Sell session handler (multi-step) ──
+    const sellDraft = sellSessions.get(chatId);
+    if (sellDraft) {
+        // Cancel at any step
+        if (text === "cancel" || text === "/cancel") {
+            sellSessions.delete(chatId);
+            await sendMessage(chatId, "❌ Listing cancelled.");
+            return;
+        }
+
+        switch (sellDraft.step) {
+            case "photo": {
+                if (hasPhoto) {
+                    const photos = update.message.photo!;
+                    const largest = photos[photos.length - 1];
+                    sellDraft.photoFileId = largest.file_id;
+                    sellDraft.photoUrl = await getPhotoUrl(largest.file_id);
+                    sellDraft.step = "name";
+                    await sendMessage(chatId, "📸 Photo received!\n\nStep 2/6: What is the product name?");
+                } else if (text === "skip") {
+                    sellDraft.step = "name";
+                    await sendMessage(chatId, "⏭️ Skipped photo.\n\nStep 2/6: What is the product name?");
+                } else {
+                    await sendMessage(chatId, "📸 Please send a product photo, or type \"skip\" to continue without one.");
+                }
+                return;
+            }
+            case "name": {
+                if (!rawText.trim()) { await sendMessage(chatId, "Please enter a product name."); return; }
+                sellDraft.name = rawText.trim();
+                sellDraft.step = "price";
+                await sendMessage(chatId, `✅ Name: ${sellDraft.name}\n\nStep 3/6: What is the price (USD)?\nExample: 99.99`);
+                return;
+            }
+            case "price": {
+                const price = parseFloat(rawText.replace(/[^0-9.]/g, ""));
+                if (isNaN(price) || price <= 0) { await sendMessage(chatId, "❌ Please enter a valid price number.\nExample: 49.99"); return; }
+                sellDraft.price = price;
+                sellDraft.step = "category";
+                const catList = CATEGORY_OPTIONS.map((c, i) => `  ${i + 1}. ${c}`).join("\n");
+                await sendMessage(chatId, `✅ Price: $${price}\n\nStep 4/6: Choose a category (type number or name):\n${catList}`);
+                return;
+            }
+            case "category": {
+                const num = parseInt(rawText);
+                let cat: string;
+                if (num >= 1 && num <= CATEGORY_OPTIONS.length) {
+                    cat = CATEGORY_OPTIONS[num - 1];
+                } else {
+                    const match = CATEGORY_OPTIONS.find(c => c.toLowerCase().includes(text));
+                    cat = match || rawText.trim();
+                }
+                sellDraft.category = cat;
+                sellDraft.step = "location";
+                await sendMessage(chatId, `✅ Category: ${cat}\n\nStep 5/6: Where is the item located?\nExample: Lausanne, Zurich, Remote`);
+                return;
+            }
+            case "location": {
+                if (!rawText.trim()) { await sendMessage(chatId, "Please enter a location."); return; }
+                sellDraft.location = rawText.trim();
+                sellDraft.step = "description";
+                await sendMessage(chatId, `✅ Location: ${sellDraft.location}\n\nStep 6/6: Add a short description.\nExample: Brand new, sealed in box`);
+                return;
+            }
+            case "description": {
+                sellDraft.description = rawText.trim() || "No description";
+                sellDraft.step = "confirm";
+                const preview = formatDraftPreview(sellDraft);
+                await sendMessage(chatId, preview);
+                return;
+            }
+            case "confirm": {
+                if (text === "yes" || text === "y") {
+                    await sendMessage(chatId, "⏳ Processing listing fee (0.1 TON via x402)...");
+                    try {
+                        const payment = await payListingFee();
+                        if (payment.success) {
+                            const published = await publishProduct(sellDraft);
+                            sellSessions.delete(chatId);
+                            if (published) {
+                                let msg = "✅ PRODUCT LISTED!\n";
+                                msg += "━━━━━━━━━━━━━━━━━━━━\n\n";
+                                msg += `🛍️ ${sellDraft.name}\n`;
+                                msg += `💰 $${sellDraft.price}\n`;
+                                msg += `📂 ${sellDraft.category}\n`;
+                                msg += `📍 ${sellDraft.location}\n\n`;
+                                msg += `Your item is now live on the Shop!\n`;
+                                msg += `🌐 http://localhost:3000/shop\n`;
+                                if (payment.txHash) msg += `\n🔗 TX: ${payment.txHash}`;
+                                await sendMessage(chatId, msg);
+                            } else {
+                                await sendMessage(chatId, "⚠️ Payment succeeded but publishing failed. Please try again.");
+                            }
+                        } else {
+                            sellSessions.delete(chatId);
+                            await sendMessage(chatId, `❌ Payment failed: ${payment.error}\n\nListing cancelled.`);
+                        }
+                    } catch (err: any) {
+                        sellSessions.delete(chatId);
+                        await sendMessage(chatId, `❌ Error: ${err.message}`);
+                    }
+                } else {
+                    sellSessions.delete(chatId);
+                    await sendMessage(chatId, "❌ Listing cancelled.");
+                }
+                return;
+            }
+        }
+        return;
+    }
+
+    // ── Regular commands ──
+
+    if (text === "sell" || text === "/sell") {
+        sellSessions.set(chatId, { step: "photo", seller: username });
+        await sendMessage(chatId,
+            "📤 SELL AN ITEM\n" +
+            "━━━━━━━━━━━━━━━━━━━━\n\n" +
+            "I'll guide you through listing your product.\n" +
+            "Listing fee: 0.1 TON (x402)\n\n" +
+            "Step 1/6: Send a product photo\n" +
+            "(or type \"skip\" to continue without one)\n\n" +
+            "Type \"cancel\" at any time to abort."
+        );
+        return;
+    }
 
     if (text === "weather" || text === "/weather") {
         // Send processing message
@@ -549,39 +771,39 @@ async function handleUpdate(update: TelegramUpdate) {
     } else if (text === "/start" || text === "start") {
         const welcomeMessage = 
             `👋 Hello, ${username}!\n\n` +
-            `Welcome to the Payment Bot!\n\n` +
-            `📝 Available Commands:\n` +
-            `• weather - Get weather data (0.01 BSA USD)\n` +
-            `• market - Browse marketplace items (0.01 BSA USD)\n` +
-            `• buy - Purchase an item (0.1 TON)\n\n` +
-            `🔍 Market Filters:\n` +
-            `• market MacBook\n` +
-            `• market price 500-700\n` +
-            `• market in Lausanne\n\n` +
-            `🛒 Buy Combo (after market search):\n` +
-            `• buy - Auto-buy if only 1 result\n` +
-            `• buy MacBook - Buy matching item\n\n` +
+            `Welcome to Wisemanager Bot!\n\n` +
+            `📝 Commands:\n` +
+            `• weather - Weather data (0.01 BSA USD)\n` +
+            `• market - Browse items (0.01 BSA USD)\n` +
+            `• buy - Purchase item (0.1 TON)\n` +
+            `• sell - List your item for sale (0.1 TON)\n\n` +
+            `🔍 Market: market MacBook / market price 500-700\n` +
+            `🛒 Buy: buy / buy MacBook (after market)\n` +
+            `📤 Sell: guided 6-step listing flow\n\n` +
             `💡 Just type naturally!`;
         await sendMessage(chatId, welcomeMessage);
     } else if (text === "/help" || text === "help") {
         const helpMessage = 
             `📖 Help\n\n` +
-            `This bot uses the x402 protocol on the TON blockchain.\n\n` +
+            `x402 protocol on TON blockchain.\n\n` +
             `Commands:\n` +
             `• weather - Weather data (0.01 BSA USD)\n` +
             `• market - Browse items (0.01 BSA USD)\n` +
-            `• buy - Purchase item (0.1 TON)\n\n` +
-            `Market Filters:\n` +
-            `• market MacBook\n` +
-            `• market price 500-700\n` +
-            `• market in Lausanne\n` +
-            `• market Dell price 500-600\n\n` +
-            `Buy Combo (market then buy):\n` +
-            `1. Search: market MacBook\n` +
-            `2. If 1 result: type "buy"\n` +
-            `3. If multiple: type "buy MacBook Air"\n` +
-            `4. Receipt generated after payment\n\n` +
-            `Each buy costs 0.1 TON via x402.`;
+            `• buy - Purchase item (0.1 TON)\n` +
+            `• sell - List item for sale (0.1 TON)\n\n` +
+            `Market: market MacBook / price 500-700 / in Lausanne\n\n` +
+            `Buy (after market search):\n` +
+            `  buy → auto-buy if 1 result\n` +
+            `  buy MacBook Air → match by name\n\n` +
+            `Sell (6-step guided flow):\n` +
+            `  1. Photo (or skip)\n` +
+            `  2. Product name\n` +
+            `  3. Price (USD)\n` +
+            `  4. Category\n` +
+            `  5. Location\n` +
+            `  6. Description\n` +
+            `  Then confirm + pay 0.1 TON listing fee\n` +
+            `  Product appears on Shop page!`;
         await sendMessage(chatId, helpMessage);
     }
 }
