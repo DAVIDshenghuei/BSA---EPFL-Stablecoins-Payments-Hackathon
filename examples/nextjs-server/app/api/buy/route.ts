@@ -1,5 +1,6 @@
 import { paymentGate } from "@ton-x402/middleware";
 import { getPaymentConfig } from "../../../lib/payment-config";
+import { addReceipt } from "../../../lib/receipt-store";
 
 const handler = (request: Request) => {
     const url = new URL(request.url);
@@ -7,23 +8,29 @@ const handler = (request: Request) => {
     const itemPrice = url.searchParams.get("price") ?? "0";
     const seller = url.searchParams.get("seller") ?? "Unknown";
     const location = url.searchParams.get("location") ?? "Unknown";
+    const txHash = url.searchParams.get("txHash") ?? "";
+    const network = url.searchParams.get("network") ?? "testnet";
 
     const receiptId = `RCP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-    return Response.json({
-        success: true,
-        receipt: {
-            id: receiptId,
-            item: itemName,
-            item_price_usd: parseFloat(itemPrice),
-            seller,
-            location,
-            payment_amount: "0.1 TON",
-            payment_protocol: "x402",
-            status: "confirmed",
-            timestamp: new Date().toISOString(),
-        },
-    });
+    const receipt = {
+        id: receiptId,
+        source: "bot" as const,
+        item: itemName,
+        item_price_usd: parseFloat(itemPrice),
+        seller,
+        location,
+        payment_amount: "0.1 TON",
+        payment_protocol: "x402",
+        status: "confirmed",
+        txHash,
+        network,
+        timestamp: new Date().toISOString(),
+    };
+
+    addReceipt(receipt);
+
+    return Response.json({ success: true, receipt });
 };
 
 export const GET = paymentGate(handler, {
