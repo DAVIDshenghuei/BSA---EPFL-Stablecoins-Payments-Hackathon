@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
+import { Providers } from "./components/Providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "BSA TONx402 — Pay-per-use APIs on TON",
-    description: "HTTP 402 payment protocol on TON blockchain. Pay-per-request APIs with BSA USD micropayments.",
+    title: "Wisemanager — Smart Marketplace on TON",
+    description: "x402 payment protocol on TON blockchain. Marketplace, smart Telegram bot, and micro-payment APIs.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en">
-            <body>{children}</body>
+            <body>
+                <Providers>{children}</Providers>
+            </body>
         </html>
     );
 }
