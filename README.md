@@ -1,21 +1,39 @@
-# BSA x TON - x402 Payment Protocol with Telegram Bot
+# Wisemanager - TON x402 Marketplace & Payment Bot
 
-A complete implementation of the **x402 protocol** (HTTP 402 Payment Required) on the **TON blockchain**, featuring a **Telegram Bot** interface for seamless micropayments. Built for the BSA x TON Stablecoins & Payments Hackathon.
+A modern **marketplace platform** with **Telegram bot integration**, powered by the **x402 protocol** on **TON blockchain**. Get instant access to weather data and browse tech products through Telegram, with seamless cryptocurrency payments using **BSA USD** stablecoin.
 
-This starter provides a **fully working pay-per-use API infrastructure** with a Telegram bot frontend, allowing users to make payments and receive data directly in Telegram chats using **BSA USD** stablecoin on TON testnet.
+**Live Bot**: [@Wisemanagersbot](https://t.me/Wisemanagersbot)
 
-**Built by**: [Stan](https://github.com/hliosone) and [Loris](https://github.com/Loris-EPFL) from BSA  
-**Questions?**: Reach out to Loris
+**Built by**: [Your Name]  
+**Based on**: BSA x TON x402 Protocol Template
 
 ---
 
-## 🎯 What's Inside
+## 🎯 Features
 
-- **Telegram Bot** - Natural language interface for x402 payments
-- **Next.js API Server** - Payment-protected endpoints
-- **x402 Protocol** - HTTP 402 Payment Required implementation
-- **TON Integration** - BSA USD Jetton payments on TON blockchain
-- **Built-in Facilitator** - Transaction verification and settlement
+### 🤖 Telegram Bot (@Wisemanagersbot)
+- **Natural Language Commands** - Chat naturally to browse and pay
+- **Weather Data** - Real-time weather information (0.01 BSA USD)
+- **Marketplace Browser** - Search and filter tech products with ease
+- **Auto Payment** - Seamless TON blockchain micropayments
+- **Smart Filters** - Search by name, price range, location
+- **Instant Responses** - Get data in seconds
+
+### 🛍️ Modern Marketplace
+- **Two-Column Product Grid** - Optimized for desktop viewing
+- **Advanced Filtering System**
+  - Search by product name
+  - Filter by location (Lausanne, Geneva, Zurich, Remote)
+  - Price range selector
+  - Condition filter (New, Like New, Used)
+- **Responsive Design** - Works on desktop, tablet, and mobile
+- **Clean Modern UI** - Inspired by Zeabur's design aesthetics
+- **Real-time Updates** - Instant filter results
+
+### 🏠 Landing Page
+- **Minimalist Design** - Focus on what matters
+- **Direct Bot Access** - One-click link to Telegram
+- **Clear Value Proposition** - "Your Wisemanager"
 
 ---
 
@@ -43,21 +61,30 @@ bsa-sp-template-x402-2026/
 │   └── facilitator/    # Transaction verification & settlement
 │
 └── examples/
-    ├── nextjs-server/  # API server with payment-protected routes
-    │   ├── app/api/
-    │   │   ├── weather/        # Weather data endpoint (0.01 BSA USD)
-    │   │   ├── joke/           # Developer jokes (0.01 BSA USD)
-    │   │   └── facilitator/    # Built-in facilitator service
-    │   └── .env.local          # Configuration file
+    ├── nextjs-server/  # API server & Web UI
+    │   ├── app/
+    │   │   ├── page.tsx                # Landing page (Wisemanager)
+    │   │   ├── marketplace/
+    │   │   │   ├── page.tsx           # Marketplace UI (2-column grid)
+    │   │   │   └── demo/page.tsx      # API testing demo
+    │   │   └── api/
+    │   │       ├── weather/           # Weather endpoint (0.01 BSA USD)
+    │   │       ├── market/            # Marketplace API (0.01 BSA USD)
+    │   │       ├── joke/              # Joke endpoint (0.01 BSA USD)
+    │   │       └── facilitator/       # Built-in facilitator
+    │   ├── MARKETPLACE_GUIDE.md       # Marketplace documentation
+    │   └── .env.local                 # Configuration
     │
     └── client-script/  # Payment client & Telegram bot
         ├── src/
-        │   ├── telegram-bot.ts # Telegram bot implementation
-        │   └── pay.ts          # CLI payment script
-        ├── start-bot.sh        # Bot startup script (WSL)
-        ├── start-bot.ps1       # Bot startup script (PowerShell)
-        ├── TELEGRAM_BOT_README.md
-        └── TROUBLESHOOTING.md
+        │   ├── telegram-bot.ts        # Bot with natural language support
+        │   └── pay.ts                 # CLI payment script
+        ├── start-bot.sh               # WSL startup script
+        ├── start-bot.ps1              # PowerShell startup script
+        ├── TELEGRAM_BOT_README.md     # Bot documentation
+        ├── TROUBLESHOOTING.md         # Debugging guide
+        ├── MARKET_FILTER_GUIDE.md     # Filter usage guide
+        └── MARKET_FILTER_QUICK_REF.md # Quick reference
 ```
 
 ### 📦 Packages Overview
@@ -92,8 +119,8 @@ bsa-sp-template-x402-2026/
 ### 1️⃣ Clone & Install
 
 ```bash
-git clone git@github.com:bsaepfl/bsa-sp-template-x402-2026.git
-cd bsa-sp-template-x402-2026
+git clone git@github.com:DAVIDshenghuei/BSA---EPFL-Stablecoins-Payments-Hackathon.git
+cd BSA---EPFL-Stablecoins-Payments-Hackathon
 pnpm install
 pnpm build
 ```
@@ -229,29 +256,122 @@ Bot: 🌤️ Weather Data
 
 ---
 
+## 🌐 Web Interface
+
+### Landing Page (`http://localhost:3000`)
+
+**Minimalist Design** featuring:
+- Large "Your Wisemanager" headline with gradient effect
+- Direct link to Telegram bot
+- Clean, centered layout
+- Mobile responsive
+
+### Marketplace (`http://localhost:3000/marketplace`)
+
+**Modern eBay-style marketplace** with:
+
+**Layout:**
+- Left sidebar with filters (320px width)
+- Two-column product grid
+- Large product cards with detailed information
+
+**Features:**
+- 🔍 **Search** - Find products by name or tags
+- 📍 **Location Filter** - Lausanne, Geneva, Zurich, Remote
+- 💰 **Price Range** - Set min/max price (vertical inputs)
+- 📦 **Condition** - New, Like New, Used
+- 🔄 **Sort Options** - Newest, Price (Low/High), Trust Score
+
+**Product Cards Display:**
+- Product image placeholder (280px height)
+- Product name and condition badge
+- Large price display
+- Seller info with trust score
+- Location and delivery speed
+- Category tags
+- "View Details" button
+
+**Responsive:**
+- Desktop: 2-column grid
+- Mobile: Single column with stacked filters
+
+---
+
 ## 💬 Bot Commands
 
+### Basic Commands
 | Command | Description |
 |---------|-------------|
-| `/start` | Welcome message and usage instructions |
-| `/help` | Help information about the bot |
-| `weather` or `/weather` | Get weather data (costs 0.01 BSA USD) |
+| `/start` or `start` | Welcome message and bot introduction |
+| `/help` or `help` | Detailed usage instructions |
+| `weather` or `/weather` | Get real-time weather data (0.01 BSA USD) |
+
+### Marketplace Commands
+
+**Basic Search:**
+```
+market                    # Show all products
+market MacBook           # Search for MacBook
+```
+
+**Filter by Price:**
+```
+market price 500-700     # Products between $500-$700
+market 1000-1500         # Alternative syntax
+```
+
+**Filter by Location:**
+```
+market in Lausanne       # Products in Lausanne
+market location Geneva   # Alternative syntax
+```
+
+**Combined Filters:**
+```
+market laptop price 600-800           # Laptops between $600-$800
+market MacBook in Zurich              # MacBooks in Zurich
+market Dell price 500-600             # Dell products, $500-$600
+market laptop price 1000-2000 in Geneva  # All filters combined
+```
+
+### Natural Language Support
+
+The bot understands natural language! You can type commands in various ways:
+- `market MacBook` or `market: MacBook`
+- `market price 500-700` or `market $500-$700`
+- `market in Lausanne` or `market at Lausanne`
 
 ---
 
 ## 🔄 How It Works
 
+### Complete User Journey
+
+1. **User opens bot** → `https://t.me/Wisemanagersbot`
+2. **User types command** → `market MacBook price 1000-2000`
+3. **Bot processes** → Parses natural language command
+4. **Bot requests API** → `GET /api/market?name=MacBook&price=1000-2000`
+5. **Server returns 402** → Payment required with TON address
+6. **Bot signs payment** → Creates signed transaction (offline)
+7. **Bot retries request** → Includes signed payment
+8. **Facilitator verifies** → Validates signature
+9. **Transaction broadcasts** → Sent to TON blockchain
+10. **Server confirms** → Payment verified on-chain
+11. **Data returned** → Filtered marketplace items
+12. **User receives** → Beautiful formatted response with tx hash
+
 ### Architecture Overview
 
 ```
 ┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│   Telegram  │      │     Bot     │      │ API Server  │      │ TON Network │
-│    User     │◄────►│  (Client)   │◄────►│ (Next.js)   │◄────►│ (Testnet)   │
+│   Telegram  │      │     Bot     │      │ Next.js     │      │    TON      │
+│    User     │◄────►│ (Client)    │◄────►│   Server    │◄────►│  Blockchain │
+│             │      │             │      │             │      │  (Testnet)  │
 └─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
                             │                      │
-                            │                      │
+                            │    Facilitator       │
                             └──────────────────────┘
-                                   Facilitator
+                              (Verify & Settle)
 ```
 
 ### Payment Flow
@@ -264,13 +384,13 @@ sequenceDiagram
     participant Facilitator
     participant TON
 
-    User->>Bot: "weather"
-    Bot->>Server: GET /api/weather
+    User->>Bot: "market MacBook"
+    Bot->>Server: GET /api/market?name=MacBook
     Server-->>Bot: 402 Payment Required (payment details)
     
-    Note over Bot: Generate & sign<br/>payment transaction
+    Note over Bot: Parse filters<br/>Generate & sign<br/>payment transaction
     
-    Bot->>Server: GET /api/weather + PAYMENT-SIGNATURE
+    Bot->>Server: GET /api/market + PAYMENT-SIGNATURE
     Server->>Facilitator: POST /verify (validate signature)
     Facilitator-->>Server: ✅ Valid
     
@@ -279,8 +399,8 @@ sequenceDiagram
     TON-->>Facilitator: Transaction confirmed
     Facilitator-->>Server: { success: true, txHash }
     
-    Server-->>Bot: 200 OK + weather data + txHash
-    Bot-->>User: 🌤️ Weather Data + confirmation
+    Server-->>Bot: 200 OK + filtered products + txHash
+    Bot-->>User: 🛍️ Marketplace Items + confirmation
 ```
 
 ---
@@ -295,6 +415,50 @@ pnpm dev:client
 
 # Test joke endpoint
 pnpm dev:client:joke
+```
+
+### Natural Language Examples
+
+**Bot Command Parsing:**
+```
+User input: "market laptop price 600-800 in Zurich"
+Bot extracts: { name: "laptop", price: "600-800", location: "Zurich" }
+API call: /api/market?name=laptop&price=600-800&location=Zurich
+```
+
+**Flexible Syntax:**
+- `market MacBook` → name filter
+- `market price 500-700` → price filter
+- `market $500-$700` → price filter (alternative)
+- `market in Lausanne` → location filter
+- `market location Geneva` → location filter (alternative)
+- `market laptop 600-800 Zurich` → all filters combined
+
+### Implementation Highlights
+
+**Smart Command Parsing:**
+```typescript
+// Bot intelligently detects filter types
+if (value.startsWith('$') || value.includes('-')) {
+  filters.price = value.replace(/\$/g, '');
+} else if (['lausanne', 'geneva', 'zurich'].includes(value.toLowerCase())) {
+  filters.location = value;
+} else {
+  filters.name = value;
+}
+```
+
+**Server-side Filtering:**
+```typescript
+// Case-insensitive name search
+items.filter(item => item.item.toLowerCase().includes(name.toLowerCase()));
+
+// Price range support
+const [min, max] = price.split('-').map(parseFloat);
+items.filter(item => item.price_usd >= min && item.price_usd <= max);
+
+// Location matching
+items.filter(item => item.location.toLowerCase().includes(location.toLowerCase()));
 ```
 
 ### Adding New Payment-Protected Routes
@@ -383,10 +547,59 @@ See `examples/client-script/TROUBLESHOOTING.md` for detailed troubleshooting.
 
 ### Payment-Protected Routes
 
-| Endpoint | Price | Description |
-|----------|-------|-------------|
-| `GET /api/weather` | 0.01 BSA USD | Weather data for Lausanne |
-| `GET /api/joke` | 0.01 BSA USD | Random developer joke |
+| Endpoint | Price | Description | Filters |
+|----------|-------|-------------|---------|
+| `GET /api/weather` | 0.01 BSA USD | Real-time weather data for Lausanne | - |
+| `GET /api/market` | 0.01 BSA USD | Marketplace product listings | `name`, `price`, `location` |
+| `GET /api/joke` | 0.01 BSA USD | Random developer joke | - |
+
+### Market API Query Parameters
+
+**Filter by Name:**
+```
+GET /api/market?name=MacBook
+```
+
+**Filter by Price Range:**
+```
+GET /api/market?price=500-700
+```
+
+**Filter by Location:**
+```
+GET /api/market?location=Lausanne
+```
+
+**Combined Filters:**
+```
+GET /api/market?name=laptop&price=600-800&location=Geneva
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "total_items": 3,
+  "filters_applied": {
+    "name": "MacBook",
+    "price": "500-700",
+    "location": "Lausanne"
+  },
+  "items": [
+    {
+      "item": "MacBook Pro 14\" M3 Pro",
+      "price_usd": 1899,
+      "seller": "TechStore",
+      "trust_score": 98,
+      "location": "Lausanne",
+      "condition": "New",
+      "delivery_speed": "1-2 days",
+      "tags": ["laptop", "apple", "m3"]
+    }
+  ],
+  "timestamp": "2026-03-21T..."
+}
+```
 
 ### Facilitator Endpoints
 
@@ -412,9 +625,14 @@ See `examples/client-script/TROUBLESHOOTING.md` for detailed troubleshooting.
 
 ## 📚 Documentation
 
-- **Telegram Bot**: `examples/client-script/TELEGRAM_BOT_README.md`
-- **Troubleshooting**: `examples/client-script/TROUBLESHOOTING.md`
-- **Translation Guide**: `examples/client-script/TRANSLATION_SUMMARY.md`
+- **Main README**: This file
+- **Marketplace Guide**: `examples/nextjs-server/MARKETPLACE_GUIDE.md` - Complete marketplace documentation
+- **Telegram Bot**: `examples/client-script/TELEGRAM_BOT_README.md` - Bot setup and usage
+- **Market Filters**: `examples/client-script/MARKET_FILTER_GUIDE.md` - Detailed filter guide
+- **Quick Reference**: `examples/client-script/MARKET_FILTER_QUICK_REF.md` - Command cheat sheet
+- **Troubleshooting**: `examples/client-script/TROUBLESHOOTING.md` - Debug guide
+- **Translation Summary**: `examples/client-script/TRANSLATION_SUMMARY.md` - Localization info
+- **Market API**: `examples/nextjs-server/app/api/market/README.md` - API documentation
 
 ---
 
@@ -507,22 +725,5 @@ See `examples/client-script/TROUBLESHOOTING.md` for detailed troubleshooting.
 ## 📄 License
 
 MIT
-
----
-
-## 🙏 Credits
-
-Built with ❤️ by [Stan](https://github.com/hliosone) and [Loris](https://github.com/Loris-EPFL) for the BSA x TON Hackathon.
-
----
-
-## 🆘 Support
-
-- **Issues**: Open an issue on GitHub
-- **Questions**: Contact Loris
-- **Documentation**: Check the `/examples/client-script/` docs
-- **Community**: Join the BSA Discord
-
----
 
 **Happy Hacking! 🚀**
