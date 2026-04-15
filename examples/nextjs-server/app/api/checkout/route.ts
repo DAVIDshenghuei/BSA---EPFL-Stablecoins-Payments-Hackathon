@@ -59,40 +59,54 @@ export async function POST(request: NextRequest) {
 
             const total = items.reduce((s: number, i: any) => s + (i.price ?? 0) * (i.quantity ?? 1), 0);
             const itemNames = items.map((i: any) => i.title ?? "item").join(", ");
-
+            const now = new Date().toISOString();
             const ts = Date.now().toString(36).toUpperCase();
+
             addReceipt({
                 id: `WEB-${ts}`,
                 type: "purchase",
                 source: "web",
                 item: itemNames,
                 item_price_usd: total,
-                seller: "Wisemanager Shop",
+                seller: items[0]?.seller || "Wisemanager Shop",
+                buyer: "You",
                 location: "Web Checkout",
                 payment_amount: "0.1 TON",
                 payment_protocol: "x402",
                 status: "confirmed",
                 txHash,
                 network,
-                timestamp: new Date().toISOString(),
+                timestamp: now,
             });
 
-            addReceipt({
-                id: `SALE-W-${ts}`,
-                type: "sale",
-                source: "web",
-                item: itemNames,
-                item_price_usd: total,
-                seller: "Wisemanager Shop",
-                buyer: "Web User",
-                location: "Web Checkout",
-                payment_amount: "0.1 TON",
-                payment_protocol: "x402",
-                status: "confirmed",
-                txHash,
-                network,
-                timestamp: new Date().toISOString(),
-            });
+            const sellerGroups = new Map<string, { items: string[]; total: number }>();
+            for (const it of items) {
+                const seller = it.seller || "Wisemanager Shop";
+                const group = sellerGroups.get(seller) || { items: [], total: 0 };
+                group.items.push(it.title ?? "item");
+                group.total += (it.price ?? 0) * (it.quantity ?? 1);
+                sellerGroups.set(seller, group);
+            }
+
+            let saleIdx = 0;
+            for (const [seller, group] of sellerGroups) {
+                addReceipt({
+                    id: `SALE-W-${ts}-${saleIdx++}`,
+                    type: "sale",
+                    source: "web",
+                    item: group.items.join(", "),
+                    item_price_usd: group.total,
+                    seller,
+                    buyer: "Web Buyer",
+                    location: "Web Checkout",
+                    payment_amount: "0.1 TON",
+                    payment_protocol: "x402",
+                    status: "confirmed",
+                    txHash,
+                    network,
+                    timestamp: now,
+                });
+            }
 
             return Response.json({
                 success: true,

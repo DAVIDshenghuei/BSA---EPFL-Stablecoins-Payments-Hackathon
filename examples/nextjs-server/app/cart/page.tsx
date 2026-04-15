@@ -31,6 +31,7 @@ export default function CartPage() {
                         title: i.title,
                         price: i.price,
                         quantity: i.quantity,
+                        seller: i.seller || "Wisemanager Shop",
                     })),
                 }),
             });
@@ -38,11 +39,12 @@ export default function CartPage() {
             const result = await res.json();
 
             if (result.success) {
+                const sellers = [...new Set(cart.map(i => i.seller || "Wisemanager Shop"))];
                 addInvoice({
                     id: `inv-${Date.now()}`,
                     amount: total.toFixed(2),
                     timestamp: Date.now(),
-                    merchant: "Wisemanager Shop",
+                    merchant: sellers.join(", "),
                     transactionHash: result.txHash || "",
                     status: result.txHash ? "paid" : "pending",
                     items: [...cart],

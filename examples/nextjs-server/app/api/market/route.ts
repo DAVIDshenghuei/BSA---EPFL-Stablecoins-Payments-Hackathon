@@ -1,7 +1,8 @@
 import { paymentGate } from "@ton-x402/middleware";
 import { getPaymentConfig } from "../../../lib/payment-config";
+import { getUserProducts } from "../../../lib/product-store";
 
-const allItems = [
+const staticItems = [
     // ── Original marketplace listings ──
     {
         id: "pc-001",
@@ -217,7 +218,20 @@ const handler = (request: Request) => {
     const location = url.searchParams.get("location");
     const category = url.searchParams.get("category");
 
-    let filteredItems = [...allItems];
+    const userListedItems = getUserProducts().map(p => ({
+        id: `user-${p.id}`,
+        category: p.category,
+        item: p.title,
+        price_usd: p.price,
+        seller: p.seller,
+        trust_score: 90,
+        location: p.location,
+        condition: "User Listed",
+        delivery_speed: "Varies",
+        tags: [p.category.toLowerCase(), p.title.toLowerCase().split(" ")[0]],
+    }));
+
+    let filteredItems = [...staticItems, ...userListedItems];
 
     if (name) {
         filteredItems = filteredItems.filter(

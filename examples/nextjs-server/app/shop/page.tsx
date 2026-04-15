@@ -90,11 +90,13 @@ export default function ShopPage() {
     }, [allProducts, selectedCategory, sortBy]);
 
     function handleAdd(product: Product) {
+        const p = product as any;
         addToCart({
             id: product.id,
             title: product.title,
             price: product.price,
             image: product.image,
+            seller: p._seller || "Wisemanager Shop",
         });
         addToast(`Added "${product.title}" to cart`);
     }
