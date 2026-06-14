@@ -3,7 +3,7 @@ import { Providers } from "./components/Providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-    title: "Wisemanager — Smart Marketplace on TON",
+    title: "IntentPay — Smart Marketplace on TON",
     description: "x402 payment protocol on TON blockchain. Marketplace, smart Telegram bot, and micro-payment APIs.",
 };
 

@@ -18,7 +18,7 @@ export function Navbar() {
             <div className="nav-container">
                 <Link href="/" className="logo">
                     <span className="logo-icon">💎</span>
-                    Wisemanager
+                    IntentPay
                 </Link>
 
                 <div className="nav-links">

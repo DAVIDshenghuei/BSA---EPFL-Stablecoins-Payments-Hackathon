@@ -772,7 +772,7 @@ async function handleUpdate(update: TelegramUpdate) {
     } else if (text === "/start" || text === "start") {
         const welcomeMessage = 
             `👋 Hello, ${username}!\n\n` +
-            `Welcome to Wisemanager Bot!\n\n` +
+            `Welcome to IntentPay Bot!\n\n` +
             `📝 Commands:\n` +
             `• weather - Weather data (0.01 BSA USD)\n` +
             `• market - Browse items (0.01 BSA USD)\n` +
@@ -809,6 +809,14 @@ async function handleUpdate(update: TelegramUpdate) {
     }
 }
 
+async function deleteWebhook(): Promise<void> {
+    const response = await fetch(`${TELEGRAM_API_URL}/deleteWebhook?drop_pending_updates=true`);
+    const data = await response.json();
+    if (!data.ok) {
+        throw new Error(data.description || "Failed to delete webhook");
+    }
+}
+
 // Long polling to get updates
 async function getUpdates(offset: number = 0): Promise<TelegramUpdate[]> {
     try {
@@ -818,11 +826,9 @@ async function getUpdates(offset: number = 0): Promise<TelegramUpdate[]> {
         if (data.ok) {
             return data.result;
         } else {
-            // Check if it's a conflict error (another instance running)
             if (data.error_code === 409) {
-                console.error("❌ Detected another Bot instance running!");
-                console.error("❌ Error:", data.description);
-                console.error("💡 Exiting... Please ensure only one Bot instance is running");
+                console.error("❌ Polling conflict (409):", data.description);
+                console.error("💡 Ensure no webhook is active and only one bot instance is running");
                 process.exit(1);
             }
             console.error("❌ Failed to get updates:", data);
@@ -849,6 +855,14 @@ async function main() {
         }
     } catch (error) {
         console.error("❌ Cannot connect to Telegram API:", error);
+        process.exit(1);
+    }
+
+    try {
+        await deleteWebhook();
+        console.log("🔗 Webhook cleared — using long polling");
+    } catch (error) {
+        console.error("❌ Failed to delete webhook:", error);
         process.exit(1);
     }
 

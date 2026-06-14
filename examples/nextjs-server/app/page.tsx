@@ -8,7 +8,7 @@ export default function HomePage() {
             <div className="hero-badge">🚀 POWERED BY TON BLOCKCHAIN</div>
 
             <h1 className="hero-title">
-                Your <span className="gradient-text">Wisemanager</span>
+                <span className="gradient-text">IntentPay</span>
             </h1>
 
             <p className="hero-description">
